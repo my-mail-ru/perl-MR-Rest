@@ -4,15 +4,12 @@ use Mouse::Role;
 
 use MR::Rest::Type;
 
+with 'MR::Rest::Role::Doc';
+
 has location => (
     is  => 'ro',
     isa => 'MR::Rest::Type::ParameterLocation',
     default => 'QUERY_STRING',
-);
-
-has doc => (
-    is  => 'ro',
-    isa => 'Str',
 );
 
 my %LOCATTR = (

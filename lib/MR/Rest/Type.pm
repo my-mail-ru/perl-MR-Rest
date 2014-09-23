@@ -23,6 +23,10 @@ subtype 'MR::Rest::Type::Error'
     => where { !defined || /^[a-z][a-z0-9_]*$/ }
     => message { "Not valid error identificatior: only [a-z0-9_]+ are allowed" };
 
+subtype 'MR::Rest::Type::ResultName'
+    => as 'ClassName'
+    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') };
+
 no Mouse::Util::TypeConstraints;
 
 1;

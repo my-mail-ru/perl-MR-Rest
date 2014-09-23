@@ -10,6 +10,8 @@ use MR::Rest::Type;
 use MR::Rest::Context;
 use MR::Rest::Parameters;
 
+with 'MR::Rest::Role::Doc';
+
 has method => (
     is  => 'ro',
     isa => 'MR::Rest::Type::Method',
@@ -33,21 +35,35 @@ has handler => (
     required => 1,
 );
 
-has doc => (
-    is  => 'ro',
-    isa => 'Str',
-);
-
 has in_class => (
     is  => 'ro',
     isa => 'ClassName',
     required => 1,
 );
 
+has name => (
+    is  => 'ro',
+    isa => 'Str',
+    lazy    => 1,
+    default => sub {
+        my ($self) = @_;
+        my $name = $self->alias;
+        $name =~ s/(?:^|_)(.)/\u$1/g;
+        my $class = sprintf "%s::%s", $_[0]->in_class, $name;
+        confess "Class $class already exists" if $class->isa('UNIVERSAL');
+        return $class;
+    },
+);
+
+has alias => (
+    is  => 'rw',
+    isa => 'Str',
+);
+
 has _params => (
     init_arg => 'params',
     is  => 'ro',
-    isa => 'HashRef',
+    isa => 'ArrayRef | HashRef | RoleName',
     default => sub { {} },
 );
 
@@ -63,42 +79,99 @@ has params_meta => (
     is       => 'ro',
     does     => 'MR::Rest::Meta::Class::Trait::Parameters',
     lazy     => 1,
-    default  => do {
-        my %counters;
-        sub {
-            my ($self) = @_;
-            my $pclass = sprintf "%s::Controller%d::Parameters", $self->in_class, ++$counters{$self->in_class};
-            Mouse->init_meta(
-                for_class  => $pclass,
-                base_class => 'MR::Rest::Parameters',
-            );
-            Mouse::Util::MetaRole::apply_metaroles(
-                for => $pclass,
-                class_metaroles => {
-                    class => ['MR::Rest::Meta::Class::Trait::Parameters'],
-                },
-            );
-            my $pmeta = $pclass->meta;
-            my $params = $self->_params;
-            foreach my $name (grep $_, @{$self->_path_params}) {
-                confess "Duplicate parameter $name" if $params->{$name}->{location} && $params->{$name}->{location} ne 'PATH';
-                $params->{$name}->{location} = 'PATH';
+    default  => sub {
+        my ($self) = @_;
+        my $name = $self->name . '::Parameters';
+        Mouse->init_meta(
+            for_class  => $name,
+            base_class => 'MR::Rest::Parameters',
+        );
+        Mouse::Util::MetaRole::apply_metaroles(
+            for => $name,
+            class_metaroles => {
+                class => ['MR::Rest::Meta::Class::Trait::Parameters'],
+            },
+        );
+        my @path_params = grep $_, @{$self->_path_params};
+        my %is_path = map { $_ => 1 } @path_params;
+        my $meta = $name->meta;
+        foreach my $p (ref $self->_params eq 'ARRAY' ? @{$self->_params} : $self->_params) {
+            if (ref $p eq 'HASH') {
+                foreach my $n (keys %$p) {
+                    my %args = ref $p->{$n} ? %{$p->{$n}} : (isa => $p->{$n});
+                    $args{location} = 'PATH' if $is_path{$n} && !exists $args{location};
+                    $meta->add_parameter($n, \%args);
+                }
+            } else {
+                Mouse::Util::apply_all_roles($name, $p);
             }
-            foreach my $name (keys %$params) {
-                $pmeta->add_parameter($name, %{$params->{$name}});
-            }
-            return $pmeta;
-        };
+        }
+        my %ploc = map { $_->name => $_->location } $meta->get_all_parameters();
+        foreach my $name (@path_params) {
+            confess "Duplicate parameter $name" if $ploc{$name} && $ploc{$name} ne 'PATH';
+            $meta->add_parameter($name, location => 'PATH') unless $ploc{$name};
+        }
+        return $meta;
     },
 );
 
-my (@controllers, %controllers);
+has _result => (
+    init_arg => 'result',
+    is       => 'ro',
+    isa      => 'ArrayRef | HashRef | Str',
+    default  => sub { {} },
+);
+
+has result_meta => (
+    init_arg => undef,
+    is       => 'ro',
+    does     => 'MR::Rest::Meta::Class::Trait::Result',
+    lazy     => 1,
+    default  => sub {
+        my ($self) = @_;
+        my $result = $self->_result;
+        return $result->meta unless ref $result || $result =~ /^(?:Array|Hash)Ref\[.+\]$/;
+        my $name = $self->name . '::Result';
+        Mouse->init_meta(for_class => $name);
+        Mouse::Util::MetaRole::apply_metaroles(
+            for => $name,
+            class_metaroles => {
+                class => ['MR::Rest::Meta::Class::Trait::Result'],
+            },
+        );
+        my $meta = $name->meta;
+        if (ref $result eq 'ARRAY' && @$result == 1) {
+            $meta->list(1);
+            $result = $result->[0];
+        } elsif (ref $result eq 'HASH' && keys %$result == 1 && (keys %$result)[0] =~ /^(?:(.+):|\*)$/) {
+            $meta->hashby($1);
+            $result = (values %$result)[0];
+        } elsif ($result =~ /^ArrayRef\[(.+)\]$/) {
+            $result = $1;
+            $meta->list(1);
+        } elsif ($result =~ /^HashRef\[(.+)\]$/) {
+            $result = $1;
+            $meta->hashby('');
+        }
+        foreach my $r (ref $result eq 'ARRAY' ? @$result : $result) {
+            if (ref $r eq 'HASH') {
+                $meta->add_field($_, $r->{$_}) foreach keys %$r;
+            } else {
+                Mouse::Util::apply_all_roles($name, $r->isa('Mouse::Role') ? $r : $r->role);
+            }
+        }
+        return $meta;
+    },
+);
+
+my (@controllers, %controllers, %controllers_by_alias);
 
 sub BUILD {
     my ($self) = @_;
     my $uri = $self->uri;
     my @components = split /\//, $uri;
     confess "Invalid controller declaration: resource uri should start with /" unless shift @components eq '';
+    my @alias = (lc $self->method);
     my $params = $self->_path_params;
     my $current = \%controllers;
     foreach my $i (0 .. $#components) {
@@ -106,13 +179,21 @@ sub BUILD {
             $params->[$i] = $1;
         } else {
             $current = $current->{$i}->{$components[$i]} ||= {};
+            push @alias, $components[$i];
         }
     }
-    my $type = $uri =~ /\/$/ ? 'LIST' : $uri =~ /\}$/ ? 'PARAM' : 'EXTRA';
-    confess sprintf "Controller for resoure uri %s, method %s is already registered", $uri, $self->method if $current->{$type}->{$self->method};
+    my $type = $uri =~ /\/$/ ? 'LIST' : $uri =~ /\}$/ ? 'ITEM' : 'EXTRA';
+    push @alias, lc $type unless $type eq 'EXTRA';
+    confess sprintf "Controller for resource uri %s, method %s is already registered", $uri, $self->method if $current->{$type}->{$self->method};
     $current->{$type}->{$self->method} = $self;
+    unless ($self->alias) {
+        my $alias = join '_', @alias;
+        $alias =~ s/[^a-z0-9_]/_/g;
+        $self->alias($alias);
+    }
+    confess sprintf "Controller with alias %s is already registered", $self->alias if $controllers_by_alias{$self->alias};
+    $controllers_by_alias{$self->alias} = $self;
     push @controllers, $self;
-    $self->params_meta;
     return;
 }
 
@@ -131,7 +212,7 @@ sub dispatch {
             $params[$i] = $components[$i];
         }
     }
-    my $type = $uri =~ /\/$/ ? 'LIST' : $params[$#components] ? 'PARAM' : 'EXTRA';
+    my $type = $uri =~ /\/$/ ? 'LIST' : $params[$#components] ? 'ITEM' : 'EXTRA';
     return $class->render(404) unless $current->{$type};
     my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
         or return $class->render(405, [ Allow => join ', ', keys %{$current->{$type}} ]);
@@ -154,7 +235,8 @@ sub process {
     my (%body, $response);
     eval {
         $context->validate_input();
-        $body{data} = $self->handler->($context);
+        my $data = $self->handler->($context);
+        $body{data} = $self->result_meta->transformer->($data);
         $response = $context;
         1;
     } or do {
@@ -200,9 +282,19 @@ sub controllers {
     return @controllers;
 }
 
+sub controller {
+    return $controllers_by_alias{$_[1]};
+}
+
+sub format_uri {
+    my ($self, %params) = @_;
+    return $self->params_meta->uri_formatter->($self->uri, \%params);
+}
+
 sub make_immutable {
     my ($self) = @_;
     $self->params_meta->make_immutable();
+    $self->result_meta->make_immutable();
     return;
 }
 

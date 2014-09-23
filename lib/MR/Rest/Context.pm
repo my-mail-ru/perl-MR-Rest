@@ -27,6 +27,17 @@ sub validate_input {
     return;
 }
 
+sub controller {
+    MR::Rest::Meta::Controller->controller($_[1]);
+}
+
+sub format_uri {
+    my ($self, $alias, %params) = @_;
+    my $controller = $self->controller($alias)
+        or confess "Controller $alias not found";
+    return sprintf "%s://%s%s", $self->env->{'psgi.url_scheme'}, $self->env->{HTTP_HOST}, $controller->format_uri(%params);
+}
+
 no Mouse;
 __PACKAGE__->meta->make_immutable();
 
