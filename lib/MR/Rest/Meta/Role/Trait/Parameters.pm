@@ -17,6 +17,19 @@ sub get_all_parameters {
     return grep $_->does('MR::Rest::Meta::Attribute::Trait::Parameter'), $self->get_all_attributes();
 }
 
+sub add_parameter_object {
+    my ($self, $name, %args) = @_;
+    return $self->add_attribute(
+        $name  => %args,
+        traits => ['MR::Rest::Meta::Attribute::Trait::ParameterObject'],
+    );
+}
+
+sub get_all_parameter_objects {
+    my ($self) = @_;
+    return grep $_->does('MR::Rest::Meta::Attribute::Trait::ParameterObject'), $self->get_all_attributes();
+}
+
 no Mouse::Role;
 
 1;

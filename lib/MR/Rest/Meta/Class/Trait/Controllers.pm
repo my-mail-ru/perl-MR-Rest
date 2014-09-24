@@ -23,9 +23,11 @@ sub add_parameters {
     );
     Mouse::Util::apply_all_roles($name, ref $args{also} eq 'ARRAY' ? @{$args{also}} : ($args{also})) if $args{also};
     my $meta = $name->meta;
-    my $params = $args{params};
-    foreach my $name (keys %$params) {
-        $meta->add_parameter($name, %{$params->{$name}});
+    foreach my $name (keys %{$args{params}}) {
+        $meta->add_parameter($name, %{$args{params}->{$name}});
+    }
+    foreach my $name (keys %{$args{objects}}) {
+        $meta->add_parameter_object($name, %{$args{objects}->{$name}});
     }
     return $meta;
 }
