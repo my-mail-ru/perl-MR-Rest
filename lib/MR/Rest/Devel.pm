@@ -13,9 +13,9 @@ controller 'GET /devel/route/' => (
         doc    => 'Str',
         params => {
             'name:' => {
-                name     => 'Str',
-                location => 'Str',
-                doc      => 'Str',
+                name => 'Str',
+                in   => 'Str',
+                doc  => 'Str',
             },
         },
         result => 'Str',
@@ -31,9 +31,9 @@ controller 'GET /devel/route/' => (
                 doc    => $_->doc,
                 params => [
                     map +{
-                        name     => $_->name,
-                        location => $_->location,
-                        doc      => $_->doc,
+                        name => $_->name,
+                        in   => $_->in,
+                        doc  => $_->doc,
                     }, $_->params_meta->get_all_parameters(),
                 ],
                 result => $c->format_uri('get_devel_result_item', classname => $_->result_meta->name),

@@ -15,7 +15,7 @@ has validator => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my $has_body = grep { $_->location eq 'BODY' } $_[0]->get_all_parameters();
+        my $has_body = grep { $_->in eq 'BODY' } $_[0]->get_all_parameters();
         my @parameters = map $_->name, $self->get_all_parameters();
         return sub {
             my ($self) = @_;
@@ -48,10 +48,10 @@ has uri_formatter => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my @path = map $_->name, grep { $_->location eq 'PATH' } $_[0]->get_all_parameters();
+        my @path = map $_->name, grep { $_->in eq 'PATH' } $_[0]->get_all_parameters();
         my $path_str = join '|', map "\Q$_\E", @path;
         my $path_re = qr/\{($path_str)\}/;
-        my @query_string = map $_->name, grep { $_->location eq 'QUERY_STRING' } $_[0]->get_all_parameters();
+        my @query_string = map $_->name, grep { $_->in eq 'QUERY_STRING' } $_[0]->get_all_parameters();
         return sub {
             my ($path, $params) = @_;
             foreach my $name (@path) {

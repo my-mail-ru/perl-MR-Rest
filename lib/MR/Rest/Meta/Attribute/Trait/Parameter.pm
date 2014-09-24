@@ -6,10 +6,10 @@ use MR::Rest::Type;
 
 with 'MR::Rest::Role::Doc';
 
-has location => (
+has in => (
     is  => 'ro',
     isa => 'MR::Rest::Type::ParameterLocation',
-    default => 'QUERY_STRING',
+    default => 'BODY',
 );
 
 my %LOCATTR = (
@@ -22,7 +22,7 @@ before _process_options => sub {
     my ($class, $name, $args) = @_;
     $args->{is} = 'ro';
     $args->{lazy} = 1;
-    my $locattr = $LOCATTR{$args->{location} || 'QUERY_STRING'};
+    my $locattr = $LOCATTR{$args->{in} || 'BODY'};
     $args->{default} = sub { $_[0]->$locattr->{$name} };
     return;
 };

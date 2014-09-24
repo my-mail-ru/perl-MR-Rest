@@ -99,17 +99,17 @@ has params_meta => (
             if (ref $p eq 'HASH') {
                 foreach my $n (keys %$p) {
                     my %args = ref $p->{$n} ? %{$p->{$n}} : (isa => $p->{$n});
-                    $args{location} = 'PATH' if $is_path{$n} && !exists $args{location};
+                    $args{in} = 'PATH' if $is_path{$n} && !exists $args{in};
                     $meta->add_parameter($n, \%args);
                 }
             } else {
                 Mouse::Util::apply_all_roles($name, $p);
             }
         }
-        my %ploc = map { $_->name => $_->location } $meta->get_all_parameters();
+        my %pin = map { $_->name => $_->in } $meta->get_all_parameters();
         foreach my $name (@path_params) {
-            confess "Duplicate parameter $name" if $ploc{$name} && $ploc{$name} ne 'PATH';
-            $meta->add_parameter($name, location => 'PATH') unless $ploc{$name};
+            confess "Duplicate parameter $name" if $pin{$name} && $pin{$name} ne 'PATH';
+            $meta->add_parameter($name, in => 'PATH') unless $pin{$name};
         }
         return $meta;
     },

@@ -60,7 +60,10 @@ sub _parse_urlencoded {
     return {
         map {
             my ($k, $v) = split /=/, $_, 2;
-            $_ = decode('UTF-8', decodeURIComponent($_)) foreach ($k, $v);
+            foreach ($k, $v) {
+                $_ = decode('UTF-8', decodeURIComponent($_));
+                s/\+/ /g;
+            }
             $k => $v;
         } split /&/, $data
     };
