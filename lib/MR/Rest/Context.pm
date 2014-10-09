@@ -2,10 +2,7 @@ package MR::Rest::Context;
 
 use Mouse;
 
-use Encode;
-use URI::Escape::XS;
-
-use MR::Rest::Type;
+use MR::Rest::AccessRoles;
 
 with 'MR::Rest::Role::Response';
 
@@ -19,6 +16,13 @@ has params => (
     is  => 'ro',
     isa => 'MR::Rest::Parameters',
     required => 1,
+);
+
+has access_roles => (
+    is  => 'ro',
+    isa => 'MR::Rest::AccessRoles',
+    lazy    => 1,
+    default => sub { MR::Rest::AccessRoles->new() },
 );
 
 sub validate_input {

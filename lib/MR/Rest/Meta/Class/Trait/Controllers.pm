@@ -4,13 +4,23 @@ use Mouse::Role;
 
 use MR::Rest::Meta::Controller;
 
+has field_traits => (
+    is  => 'rw',
+    isa => 'ArrayRef[RoleName]',
+    default => sub { [] },
+);
+
+has controller_class => (
+    is  => 'rw',
+    isa => 'ClassName',
+    default => 'MR::Rest::Meta::Controller',
+);
+
 has controllers => (
     is  => 'ro',
     isa => 'ArrayRef[MR::Rest::Meta::Controller]',
     default => sub { [] },
 );
-
-my $ANON_SERIAL = 0;
 
 sub add_parameters {
     my ($self, $name, %args) = @_;
@@ -34,37 +44,14 @@ sub add_parameters {
 
 sub add_result {
     my ($self, $name, %args) = @_;
-    $name = sprintf "MR::Rest::Result::__ANON__::%s", ++$ANON_SERIAL unless defined $name;
-    my $rolename = "${name}::Role";
-    my $classname = $name;
-    Mouse::Role->init_meta(for_class => $rolename);
-    Mouse::Util::MetaRole::apply_metaroles(
-        for => $rolename,
-        role_metaroles => {
-            role => ['MR::Rest::Meta::Role::Trait::Result'],
-        },
-    );
-    Mouse::Util::apply_all_roles($rolename, ref $args{also} eq 'ARRAY' ? @{$args{also}} : ($args{also})) if $args{also};
-    my $rolemeta = $rolename->meta;
-    $rolemeta->add_field($_ => $args{fields}->{$_}) foreach keys %{$args{fields}};
-    Mouse->init_meta(for_class => $classname);
-    Mouse::Util::MetaRole::apply_metaroles(
-        for => $classname,
-        class_metaroles => {
-            class => ['MR::Rest::Meta::Class::Trait::Result'],
-        },
-    );
-    Mouse::Util::apply_all_roles($classname, $rolename);
-    my $classmeta = $classname->meta;
-    $classmeta->add_method(role => sub { $rolename });
-    return $classmeta;
+    return MR::Rest::Meta::Class::Trait::Result->init_meta(%args, for_class => $name, field_traits => $self->field_traits);
 }
 
 sub add_controller {
     my ($self, $name, %args) = @_;
     my ($method, $uri) = split / /, $name, 2;
     confess "Invalid controller declaration: it should be in form 'METHOD /resource/uri'" unless $uri;
-    my $controller = MR::Rest::Meta::Controller->new(
+    my $controller = $self->controller_class->new(
         %args,
         method   => $method,
         uri      => $uri,

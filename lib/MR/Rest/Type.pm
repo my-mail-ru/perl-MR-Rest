@@ -4,13 +4,6 @@ use Mouse::Util::TypeConstraints;
 
 enum 'MR::Rest::Type::Method' => [qw/ GET POST PUT DELETE HEAD /];
 
-my @allow = qw/ SELF FRIENDS FRIENDS_FRIENDS FOLLOWERS ALL /;
-my %allow = map { $_ => 1 } @allow;
-subtype 'MR::Rest::Type::Allow'
-    => as 'ArrayRef'
-    => where { @$_ == grep $allow{$_}, @$_ }
-    => message { "Possible elements of array are @allow" };
-
 enum 'MR::Rest::Type::ParameterLocation' => [qw/ PATH QUERY_STRING BODY /];
 
 subtype 'MR::Rest::Type::Status'
@@ -26,6 +19,12 @@ subtype 'MR::Rest::Type::Error'
 subtype 'MR::Rest::Type::ResultName'
     => as 'ClassName'
     => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') };
+
+subtype 'MR::Rest::Type::Allow'
+    => as 'ArrayRef';
+coerce 'MR::Rest::Type::Allow'
+    => from 'Str'
+    => via { [$_] };
 
 no Mouse::Util::TypeConstraints;
 

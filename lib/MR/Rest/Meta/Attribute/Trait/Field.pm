@@ -2,6 +2,8 @@ package MR::Rest::Meta::Attribute::Trait::Field;
 
 use Mouse::Role;
 
+use MR::Rest::Type;
+
 with 'MR::Rest::Role::Doc';
 
 has accessor => (
@@ -15,6 +17,13 @@ has hashby => (
     is  => 'ro',
     isa => 'Maybe[Str]',
     default => undef,
+);
+
+has allow => (
+    is  => 'ro',
+    isa => 'MR::Rest::Type::Allow',
+    coerce  => 1,
+    default => sub { [ 'all' ] },
 );
 
 before _process_options => sub {

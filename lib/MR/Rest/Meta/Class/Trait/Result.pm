@@ -2,6 +2,8 @@ package MR::Rest::Meta::Class::Trait::Result;
 
 use Mouse::Role;
 
+use MR::Rest::Type;
+
 with 'MR::Rest::Meta::Role::Trait::Result';
 
 has transformer_code => (
@@ -20,6 +22,10 @@ has transformer_code => (
                 my $dkey = $cond eq 'else' ? $rkey : $field->accessor;
                 my $result = "\$result$rkey";
                 my $value = "\$_->$dkey";
+                my $allow = @{$field->allow} == 0 ? 0
+                    : grep({ $_ eq 'all' } @{$field->allow}) ? 1
+                    : join(' || ', map "\$roles->$_", @{$field->allow});
+                push @code, "if ($allow) {";
                 my $type = $field->type_constraint;
                 if ($type->is_a_type_of('Num')) {
                     push @code, "$result = 0 + $value;";
@@ -31,11 +37,11 @@ has transformer_code => (
                 } elsif ($type->is_a_type_of('Maybe')) {
                     my $param = $type->type_parameter;
                     if ($param->is_a_type_of('Num')) {
-                        push @code, "$result = do { my \$v = $value; defined \$v ? 0 + \$v : undef };";
+                        push @code, "my \$v = $value; $result = defined \$v ? 0 + \$v : undef;";
                     } elsif ($param->is_a_type_of('Str')) {
-                        push @code, "$result = do { my \$v = $value; defined \$v ? \"\$v\" : undef };";
+                        push @code, "my \$v = $value; $result = defined \$v ? \"\$v\" : undef;";
                     } elsif ($param->is_a_type_of('Bool')) {
-                        push @code, "$result = do { my \$v = $value; defined \$v ? \$v ? \\1 : \\0 : undef };";
+                        push @code, "my \$v = $value; $result = defined \$v ? \$v ? \\1 : \\0 : undef;";
                     }
                 } elsif ($type->is_a_type_of('ArrayRef')) {
                     my $code = $type->type_parameter->name->meta->transformer_code;
@@ -45,9 +51,10 @@ has transformer_code => (
                     if (my $hashby = $field->hashby) {
                         push @code, "\%{$result} = map { \$_->{$hashby} => \$_ } map { $code } \@{$value};"
                     } else {
-                        push @code, "{ my \$h = $value; \%{$result} = map { \$_ => do { local \$_ = \$h->{\$_}; $code } } keys \%\$h; }";
+                        push @code, "my \$h = $value; \%{$result} = map { \$_ => do { local \$_ = \$h->{\$_}; $code } } keys \%\$h;";
                     }
                 }
+                push @code, '}';
             }
             push @code, '}';
         }
@@ -66,10 +73,33 @@ has transformer => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
+        my $name = $self->name;
         my $code = $self->transformer_code;
-        return eval "sub { local (\$_) = \@_; $code }" || confess $@;
+        return eval "#line 1 \"$name\"\nsub { (local \$_, my \$roles) = \@_; $code }" || confess $@;
     },
 );
+
+my $ANON_SERIAL = 0;
+
+sub init_meta {
+    my ($class, %args) = @_;
+    my $name = delete $args{for_class};
+    $name = sprintf "MR::Rest::Result::__ANON__::%s", ++$ANON_SERIAL unless defined $name;
+    Mouse->init_meta(for_class => $name);
+    Mouse::Util::MetaRole::apply_metaroles(
+        for => $name,
+        class_metaroles => {
+            class => ['MR::Rest::Meta::Class::Trait::Result'],
+        },
+    );
+    my $rolename = "${name}::Role";
+    my $rolemeta = MR::Rest::Meta::Role::Trait::Result->init_meta(%args, for_class => $rolename);
+    Mouse::Util::apply_all_roles($name, $rolename);
+    my $meta = $name->meta;
+    $meta->add_method(role => sub { $rolename });
+    $meta->field_traits($args{field_traits}) if $args{field_traits};
+    return $meta;
+}
 
 before make_immutable => sub {
     my ($self) = @_;

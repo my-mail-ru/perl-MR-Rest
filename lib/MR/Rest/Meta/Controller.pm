@@ -27,6 +27,8 @@ has uri => (
 has allow => (
     is  => 'ro',
     isa => 'MR::Rest::Type::Allow',
+    coerce  => 1,
+    default => sub { [ 'all' ] },
 );
 
 has handler => (
@@ -58,6 +60,31 @@ has name => (
 has alias => (
     is  => 'rw',
     isa => 'Str',
+);
+
+has context_class => (
+    is  => 'ro',
+    isa => 'ClassName',
+    default => 'MR::Rest::Context',
+);
+
+has authorizator => (
+    init_arg => undef,
+    is       => 'ro',
+    isa      => 'CodeRef',
+    lazy     => 1,
+    default  => sub {
+        my ($self) = @_;
+        my @allow = @{$self->allow};
+        return sub { 1 } if grep { $_ eq 'all' } @allow;
+        return sub {
+            my ($roles) = @_;
+            foreach my $role (@allow) {
+                return 1 if $roles->$role;
+            }
+            return 0;
+        };
+    },
 );
 
 has _params => (
@@ -226,7 +253,7 @@ sub dispatch {
         }
     }
     my $params = $controller->params_meta->new_object(env => $env, path_params => \%params);
-    my $context = MR::Rest::Context->new(env => $env, params => $params);
+    my $context = $controller->context_class->new(env => $env, params => $params);
     return $controller->process($context);
 }
 
@@ -234,9 +261,7 @@ sub process {
     my ($self, $context) = @_;
     my (%body, $response);
     eval {
-        $context->validate_input();
-        my $data = $self->handler->($context);
-        $body{data} = $self->result_meta->transformer->($data);
+        $body{data} = $self->handle($context);
         $response = $context;
         1;
     } or do {
@@ -249,7 +274,7 @@ sub process {
         }
     };
     if ($response) {
-        $body{status} = $response->status;
+        $body{status} = 0 + $response->status;
         if ($body{status} >= 400 && $body{status} < 500) {
             $body{error} = $response->error if defined $response->error;
             $body{error_description} = $response->error_description if defined $response->error_description;
@@ -257,6 +282,16 @@ sub process {
         }
     }
     return $self->render(\%body);
+}
+
+sub handle {
+    my ($self, $context) = @_;
+    $context->validate_input();
+    die MR::Rest::Error->new(403)
+        unless $self->authorizator->($context->access_roles);
+    my $data = $self->handler->($context);
+    my $result_meta = $self->result_meta;
+    return $result_meta->transformer->($data, $context->access_roles);
 }
 
 sub render {
