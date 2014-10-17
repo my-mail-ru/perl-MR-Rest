@@ -16,12 +16,20 @@ subtype 'MR::Rest::Type::Error'
     => where { !defined || /^[a-z][a-z0-9_]*$/ }
     => message { "Not valid error identificatior: only [a-z0-9_]+ are allowed" };
 
+subtype 'MR::Rest::Type::ControllersName'
+    => as 'ClassName'
+    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Controllers') };
+
+subtype 'MR::Rest::Type::ParametersName'
+    => as 'ClassName'
+    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Parameters') };
+
 subtype 'MR::Rest::Type::ResultName'
     => as 'ClassName'
     => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') };
 
 subtype 'MR::Rest::Type::Allow'
-    => as 'ArrayRef';
+    => as 'ArrayRef[Str]';
 coerce 'MR::Rest::Type::Allow'
     => from 'Str'
     => via { [$_] };

@@ -29,6 +29,7 @@ has allow => (
 before _process_options => sub {
     my ($class, $name, $args) = @_;
     $args->{is} = 'ro';
+    $args->{required} = $args->{allow} ? ref $args->{allow} ? grep { $_ eq 'all' } @{$args->{allow}} > 0 : $args->{allow} eq 'all' : 1 unless exists $args->{required};
     return;
 };
 

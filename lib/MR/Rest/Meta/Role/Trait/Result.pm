@@ -30,7 +30,7 @@ sub init_meta {
             role => ['MR::Rest::Meta::Role::Trait::Result'],
         },
     );
-    Mouse::Util::apply_all_roles($name, ref $args{also} eq 'ARRAY' ? @{$args{also}} : ($args{also})) if $args{also};
+    Mouse::Util::apply_all_roles($name, map { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') ? $_->role : $_ } ref $args{also} eq 'ARRAY' ? @{$args{also}} : ($args{also})) if $args{also};
     my $meta = $name->meta;
     $meta->field_traits($args{field_traits}) if $args{field_traits};
     $meta->add_field($_ => $args{fields}->{$_}) foreach keys %{$args{fields}};

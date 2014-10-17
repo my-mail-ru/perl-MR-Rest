@@ -6,7 +6,7 @@ use Mouse::Util::MetaRole;
 use MR::Rest::Meta::Controller;
 
 Mouse::Exporter->setup_import_methods(
-    as_is => [qw/ params result controller /],
+    as_is => [qw/ doc params result controller /],
     also  => 'Mouse',
 );
 
@@ -20,6 +20,10 @@ sub init_meta {
         },
     );
     return $args{for_class}->meta();
+}
+
+sub doc {
+    caller->meta->doc(@_);
 }
 
 sub params {

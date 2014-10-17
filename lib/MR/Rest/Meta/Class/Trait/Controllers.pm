@@ -3,6 +3,12 @@ package MR::Rest::Meta::Class::Trait::Controllers;
 use Mouse::Role;
 
 use MR::Rest::Meta::Controller;
+use MR::Rest::Meta::Class::Trait::Result;
+
+has doc => (
+    is  => 'rw',
+    isa => 'Str',
+);
 
 has field_traits => (
     is  => 'rw',
@@ -61,9 +67,16 @@ sub add_controller {
     return $controller;
 }
 
+my @controllers_metas;
+
+sub controllers_metas {
+    @controllers_metas;
+}
+
 before make_immutable => sub {
     my ($self) = @_;
     $_->make_immutable() foreach @{$self->controllers};
+    push @controllers_metas, $self;
     return;
 };
 

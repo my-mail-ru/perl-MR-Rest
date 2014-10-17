@@ -22,10 +22,11 @@ has transformer_code => (
                 my $dkey = $cond eq 'else' ? $rkey : $field->accessor;
                 my $result = "\$result$rkey";
                 my $value = "\$_->$dkey";
+                my $exists = $cond eq 'else' && !$field->is_required ? "exists $value" : 1;
                 my $allow = @{$field->allow} == 0 ? 0
                     : grep({ $_ eq 'all' } @{$field->allow}) ? 1
                     : join(' || ', map "\$roles->$_", @{$field->allow});
-                push @code, "if ($allow) {";
+                push @code, "if ($exists && $allow) {";
                 my $type = $field->type_constraint;
                 if ($type->is_a_type_of('Num')) {
                     push @code, "$result = 0 + $value;";
@@ -44,8 +45,17 @@ has transformer_code => (
                         push @code, "my \$v = $value; $result = defined \$v ? \$v ? \\1 : \\0 : undef;";
                     }
                 } elsif ($type->is_a_type_of('ArrayRef')) {
-                    my $code = $type->type_parameter->name->meta->transformer_code;
-                    push @code, "\@{$result} = map { $code } \@{$value};";
+                    my $param = $type->type_parameter;
+                    if ($param->is_a_type_of('Num')) {
+                        push @code, "$result = [ map { 0 + \$_ } \@{$value} ];";
+                    } elsif ($param->is_a_type_of('Str')) {
+                        push @code, "$result = [ map \"\$_\", \@{$value} ];";
+                    } elsif ($param->is_a_type_of('Bool')) {
+                        push @code, "$result = [ map { \$_ ? \\1 : \\0 } \@{$value} ];";
+                    } else {
+                        my $code = $param->name->meta->transformer_code;
+                        push @code, "\@{$result} = map { $code } \@{$value};";
+                    }
                 } elsif ($type->is_a_type_of('HashRef')) {
                     my $code = $type->type_parameter->name->meta->transformer_code;
                     if (my $hashby = $field->hashby) {
@@ -53,6 +63,9 @@ has transformer_code => (
                     } else {
                         push @code, "my \$h = $value; \%{$result} = map { \$_ => do { local \$_ = \$h->{\$_}; $code } } keys \%\$h;";
                     }
+                } elsif ($type->is_a_type_of('Object')) {
+                    my $name = $type->name;
+                    push @code, "$result = $name\::transform($value, \$roles);";
                 }
                 push @code, '}';
             }
@@ -98,6 +111,7 @@ sub init_meta {
     my $meta = $name->meta;
     $meta->add_method(role => sub { $rolename });
     $meta->field_traits($args{field_traits}) if $args{field_traits};
+    $meta->add_method(transform => $meta->transformer);
     return $meta;
 }
 

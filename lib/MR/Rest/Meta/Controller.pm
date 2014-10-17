@@ -62,6 +62,12 @@ has alias => (
     isa => 'Str',
 );
 
+has data => (
+    is  => 'ro',
+    isa => 'Bool',
+    default => 1,
+);
+
 has context_class => (
     is  => 'ro',
     isa => 'ClassName',
@@ -242,7 +248,7 @@ sub dispatch {
     my $type = $uri =~ /\/$/ ? 'LIST' : $params[$#components] ? 'ITEM' : 'EXTRA';
     return $class->render(404) unless $current->{$type};
     my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
-        or return $class->render(405, [ Allow => join ', ', keys %{$current->{$type}} ]);
+        or return $class->render(405, undef, [ Allow => join ', ', keys %{$current->{$type}} ]);
     my $paramnames = $controller->_path_params;
     return $class->render(404) unless @$paramnames == @params;
     my %params;
@@ -259,29 +265,32 @@ sub dispatch {
 
 sub process {
     my ($self, $context) = @_;
-    my (%body, $response);
+    my ($status, $body, $headers, $response);
     eval {
-        $body{data} = $self->handle($context);
+        $body = $self->handle($context);
+        $body = { data => $body } if $self->data;
         $response = $context;
         1;
     } or do {
         my $e = $@;
+        $body = {};
         if (blessed $e && $e->does('MR::Rest::Role::Response')) {
             $response = $e;
         } else {
-            %body = (status => 500);
-            $body{exception_message} = $e; # FIXME is_test_server
+            $status = 500;
+            $body->{exception_message} = $e; # FIXME is_test_server
         }
     };
     if ($response) {
-        $body{status} = 0 + $response->status;
-        if ($body{status} >= 400 && $body{status} < 500) {
-            $body{error} = $response->error if defined $response->error;
-            $body{error_description} = $response->error_description if defined $response->error_description;
-            $body{error_uri} = $response->error_uri if defined $response->error_uri;
+        $status = 0 + $response->status;
+        $headers = $response->headers;
+        if ($status >= 400 && $status < 500) {
+            $body->{error} = $response->error if defined $response->error;
+            $body->{error_description} = $response->error_description if defined $response->error_description;
+            $body->{error_uri} = $response->error_uri if defined $response->error_uri;
         }
     }
-    return $self->render(\%body);
+    return $self->render($status, $body, $headers);
 }
 
 sub handle {
@@ -295,16 +304,15 @@ sub handle {
 }
 
 sub render {
-    my ($class, $data, $headers) = @_;
-    $data = { status => $data } unless ref $data;
+    my ($self, $status, $data, $headers) = @_;
+    $data = {} unless ref $data eq 'HASH';
     my $body = eval {
         encode_json($data);
     } || do {
-        $data = { status => 500 };
+        $data = {};
         $data->{exception_message} = $@; # FIXME is_test_server
-        eval { encode_json($data) } || '{ "status": 500 }';
+        eval { encode_json($data) } || '{}';
     };
-    my $status = $data->{status};
     my @headers = $headers ? @$headers : ();
     unless ($status < 200 || $status == 204 || $status == 304) {
         push @headers, 'Content-Type' => 'application/json';
