@@ -15,11 +15,11 @@ has validator => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my $has_body = grep { $_->in eq 'BODY' } $_[0]->get_all_parameters();
-        my @parameters = map $_->name, $self->get_all_parameters();
+        my $has_form = grep { $_->in eq 'form' } $_[0]->get_all_parameters();
+        my @parameters = map $_->name, grep { $_->in ne 'body' } $self->get_all_parameters();
         return sub {
             my ($self) = @_;
-            if ($has_body) {
+            if ($has_form) {
                 unless ($self->_env->{CONTENT_TYPE} eq 'application/x-www-form-urlencoded') {
                     die MR::Rest::Error->new(415, 'invalid_content_type', "Content-Type should be 'application/x-www-form-urlencoded'");
                 }
@@ -29,7 +29,7 @@ has validator => (
                 if ($self->_env->{CONTENT_LENGTH} > 1024 * 1024) {
                     die MR::Rest::Error->new(413, 'request_too_large', "Content-Length should be less then 1Mb");
                 }
-                $self->_body_params;
+                $self->_form_params;
             }
             my @invalid;
             foreach my $param (@parameters) {
@@ -48,10 +48,10 @@ has uri_formatter => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my @path = map $_->name, grep { $_->in eq 'PATH' } $_[0]->get_all_parameters();
+        my @path = map $_->name, grep { $_->in eq 'path' } $_[0]->get_all_parameters();
         my $path_str = join '|', map "\Q$_\E", @path;
         my $path_re = qr/\{($path_str)\}/;
-        my @query_string = map $_->name, grep { $_->in eq 'QUERY_STRING' } $_[0]->get_all_parameters();
+        my @query = map $_->name, grep { $_->in eq 'query' } $_[0]->get_all_parameters();
         return sub {
             my ($path, $params) = @_;
             foreach my $name (@path) {
@@ -59,7 +59,7 @@ has uri_formatter => (
             }
             $path =~ s/$path_re/encodeURIComponent($params->{$1})/ge;
             my @qs;
-            foreach my $name (@query_string) {
+            foreach my $name (@query) {
                 push @qs, join '=', encodeURIComponent($name), encodeURIComponent($params->{$name}) if defined $params->{$name};
             }
             $path .= '?' . join '&', @qs if @qs;
@@ -70,6 +70,17 @@ has uri_formatter => (
 
 before make_immutable => sub {
     my ($self) = @_;
+    my ($has_form, $has_body);
+    foreach my $param ($self->get_all_parameters()) {
+        if ($param->in eq 'form') {
+            $has_form = 1;
+        } elsif ($param->in eq 'body') {
+            $has_body = 1;
+        }
+    }
+    confess "form and body parameters can't be used at the same time" if $has_form && $has_body;
+    Mouse::Util::apply_all_roles($self->name, 'MR::Rest::Role::Parameters::Form') if $has_form;
+    Mouse::Util::apply_all_roles($self->name, 'MR::Rest::Role::Parameters::Body') if $has_body;
     $self->validator;
     $self->uri_formatter;
     return;

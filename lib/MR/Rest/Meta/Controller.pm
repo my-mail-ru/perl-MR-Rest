@@ -132,7 +132,7 @@ has params_meta => (
             if (ref $p eq 'HASH') {
                 foreach my $n (keys %$p) {
                     my %args = ref $p->{$n} ? %{$p->{$n}} : (isa => $p->{$n});
-                    $args{in} = 'PATH' if $is_path{$n} && !exists $args{in};
+                    $args{in} = 'path' if $is_path{$n} && !exists $args{in};
                     $meta->add_parameter($n, \%args);
                 }
             } else {
@@ -141,8 +141,8 @@ has params_meta => (
         }
         my %pin = map { $_->name => $_->in } $meta->get_all_parameters();
         foreach my $name (@path_params) {
-            confess "Duplicate parameter $name" if $pin{$name} && $pin{$name} ne 'PATH';
-            $meta->add_parameter($name, in => 'PATH') unless $pin{$name};
+            confess "Duplicate parameter $name" if $pin{$name} && $pin{$name} ne 'path';
+            $meta->add_parameter($name, in => 'path') unless $pin{$name};
         }
         return $meta;
     },
@@ -279,6 +279,7 @@ sub process {
         } else {
             $status = 500;
             $body->{exception_message} = $e; # FIXME is_test_server
+            warn "[500] $e";
         }
     };
     if ($response) {

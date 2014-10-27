@@ -19,7 +19,7 @@ has _path_params => (
     default => sub { {} },
 );
 
-has _query_string_params => (
+has _query_params => (
     init_arg => undef,
     is  => 'ro',
     isa => 'HashRef',
@@ -27,25 +27,6 @@ has _query_string_params => (
     default => sub {
         my ($self) = @_;
         return $self->_parse_urlencoded($self->_env->{QUERY_STRING});
-    },
-);
-
-has _body_params => (
-    init_arg => undef,
-    is       => 'ro',
-    isa      => 'HashRef',
-    lazy     => 1,
-    default  => sub {
-        my ($self) = @_;
-        my $input = $self->_env->{'psgi.input'};
-        my $read;
-        my $data = '';
-        while ($read = $input->read(my $buf, 1024)) {
-            $data .= $buf;
-        }
-        confess "Failed to read from input stream" unless defined $read;
-        # TODO check content-length, wait until all data is available
-        return $self->_parse_urlencoded($data);
     },
 );
 

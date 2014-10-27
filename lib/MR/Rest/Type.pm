@@ -4,7 +4,7 @@ use Mouse::Util::TypeConstraints;
 
 enum 'MR::Rest::Type::Method' => [qw/ GET POST PUT DELETE HEAD /];
 
-enum 'MR::Rest::Type::ParameterLocation' => [qw/ PATH QUERY_STRING BODY /];
+enum 'MR::Rest::Type::ParameterLocation' => [qw/ path query body header form /];
 
 subtype 'MR::Rest::Type::Status'
     => as 'Int'

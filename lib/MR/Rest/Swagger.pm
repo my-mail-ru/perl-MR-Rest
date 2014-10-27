@@ -32,7 +32,6 @@ controller 'GET /devel/doc/' => (
     },
     handler => sub {
         my ($c) = @_;
-        $c->add_header('Access-Control-Allow-Origin' => '*');
         return {
             swaggerVersion => '1.2',
             apis => [ map +{ path => $_->name, description => $_->doc },  MR::Rest::Meta::Class::Trait::Controllers->controllers_metas() ],
@@ -108,8 +107,6 @@ result 'MR::Rest::Swagger::Model' => {
     discriminator => { isa => 'Str', required => 0 },
 };
 
-my %IN = (PATH => 'path', QUERY_STRING => 'query', BODY => 'form');
-
 controller 'GET /devel/doc/{name}' => (
     data    => 0,
     params  => {
@@ -128,7 +125,6 @@ controller 'GET /devel/doc/{name}' => (
     },
     handler => sub {
         my ($c) = @_;
-        $c->add_header('Access-Control-Allow-Origin' => '*');
         my (@uri, %apis, @results, @models, %models);
         foreach my $controller (@{$c->params->name->meta->controllers}) {
             push @uri, $controller->uri;
@@ -150,7 +146,7 @@ controller 'GET /devel/doc/{name}' => (
                 nickname   => $controller->alias,
                 parameters => [
                     map +{
-                        paramType   => $IN{$_->in},
+                        paramType   => $_->in,
                         name        => $_->name,
                         description => $_->doc,
                         required    => $_->is_required,
