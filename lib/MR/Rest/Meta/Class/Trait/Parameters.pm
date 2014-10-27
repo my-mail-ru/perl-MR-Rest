@@ -26,6 +26,9 @@ has validator => (
                 unless (exists $self->_env->{CONTENT_LENGTH}) {
                     die MR::Rest::Error->new(411, 'length_required', "Content-Length Required");
                 }
+                if (!$self->_env->{CONTENT_LENGTH}) {
+                    die MR::Rest::Error->new(400, 'body_required', "Content required");
+                }
                 if ($self->_env->{CONTENT_LENGTH} > 1024 * 1024) {
                     die MR::Rest::Error->new(413, 'request_too_large', "Content-Length should be less then 1Mb");
                 }
