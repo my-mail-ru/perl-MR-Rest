@@ -106,6 +106,28 @@ has transformer => (
     },
 );
 
+has has_access_restrictions => (
+    init_arg => undef,
+    is       => 'ro',
+    isa      => 'Bool',
+    lazy     => 1,
+    default  => sub {
+        my ($self) = @_;
+        foreach my $field ($self->get_all_fields()) {
+            return 1 if grep { $_ ne 'all' } @{$field->allow};
+            my $type = $field->type_constraint;
+            my $param = $type->type_parameter;
+            $type = $param if $param && $param->is_a_type_of('ArrayRef');
+            if ($type->is_a_type_of('Object')) {
+                return 1 if $type->name->meta->has_access_restrictions();
+            } elsif ($type->is_a_type_of('HashRef')) {
+                return 1 if $type->type_parameter->name->meta->has_access_restrictions();
+            }
+        }
+        return 0;
+    },
+);
+
 my $ANON_SERIAL = 0;
 
 sub init_meta {

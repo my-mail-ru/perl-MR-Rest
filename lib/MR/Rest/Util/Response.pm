@@ -1,12 +1,13 @@
 package MR::Rest::Util::Response;
 
 use Mouse::Exporter;
+use Carp qw/confess/;
 
 use MR::Rest::Response::Error;
 use MR::Rest::Meta::Response;
 
 Mouse::Exporter->setup_import_methods(
-    as_is => [qw/ response error_response /],
+    as_is => [qw/ response error_response where_throw_error /],
 );
 
 sub response {
@@ -16,16 +17,34 @@ sub response {
 }
 
 sub error_response {
-    my ($name, $status, $desc, $uri) = @_;
-    my %args;
-    $args{error} = $name;
-    $args{error_description} = $desc if defined $desc;
-    $args{error_uri} = $uri if defined $uri;
+    my ($name, $status, $doc, %errargs);
+    if (@_ == 3) {
+        ($name, $status, my $desc) = @_;
+        $errargs{error} = $name;
+        $errargs{error_description} = $desc if defined $desc;
+    } else {
+        ($name, my %args) = @_;
+        $errargs{error} = $name;
+        $errargs{error_description} = $args{desc} if defined $args{desc};
+        $errargs{error_uri} = $args{uri} if defined $args{uri};
+        $doc = $args{doc};
+    }
     $name = MR::Rest::Meta::Response->error_name($name);
     return response $name => (
         isa    => 'MR::Rest::Response::Error',
-        status => $status,
-        args   => \%args,
+        status => $status || 400,
+        args   => \%errargs,
+        $doc ? (doc => $doc) : (),
+    );
+}
+
+sub where_throw_error (&$) {
+    my ($check, $name) = @_;
+    my $response = MR::Rest::Meta::Response->error($name) or confess "Error not found: $name";
+    my $sub = $response->response_sub;
+    return (
+        Mouse::Util::TypeConstraints::where { $check->() ? 1 : die $sub->() },
+        Mouse::Util::TypeConstraints::message { $sub->() },
     );
 }
 

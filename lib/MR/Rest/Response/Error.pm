@@ -54,7 +54,13 @@ around BUILDARGS => sub {
         @args{qw/ status error error_description error_uri/} = @_;
         return $class->$orig(\%args);
     } else {
-        return $class->$orig(@_);
+        my %args = @_ == 1 ? %{$_[0]} : @_;
+        if (my $args = delete $args{args}) {
+            $args{error_description} = sprintf $args{error_description}, @$args;
+            return $class->$orig(%args);
+        } else {
+            return $class->$orig(@_);
+        }
     }
 };
 

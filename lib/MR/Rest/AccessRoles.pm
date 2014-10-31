@@ -8,6 +8,12 @@ has all => (
     default => 1,
 );
 
+has authorized => (
+    is  => 'ro',
+    isa => 'Bool',
+    default => 0,
+);
+
 no Mouse;
 __PACKAGE__->meta->make_immutable();
 

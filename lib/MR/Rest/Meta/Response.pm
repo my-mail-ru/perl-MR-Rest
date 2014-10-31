@@ -85,7 +85,12 @@ sub responses {
 
 sub response {
     my ($class, $name) = @_;
-    return $responses{$name} or confess "Response '$name' not found";
+    return $responses{$name};
+}
+
+sub error {
+    my ($class, $name) = @_;
+    return $class->response($class->error_name($name));
 }
 
 sub error_name {

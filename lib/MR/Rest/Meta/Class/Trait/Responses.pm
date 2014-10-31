@@ -18,6 +18,7 @@ sub add_response {
     } elsif (ref $response ne 'MR::Rest::Meta::Response') {
         confess "Invalid response: $response";
     }
+    confess "Response for $name not found" unless $response;
     return if $self->responses->{$name} && $self->responses->{$name} eq $response;
     confess "Duplicate response: $name" if $self->responses->{$name};
     $self->responses->{$name} = $response;

@@ -18,7 +18,11 @@ has validator => (
             my ($self) = @_;
             my @invalid;
             foreach my $param (@parameters) {
-                push @invalid, $param unless eval { $self->$param; 1 };
+                unless (eval { $self->$param; 1 }) {
+                    my $e = $@;
+                    die $e if blessed $e && $e->does('MR::Rest::Role::Response');
+                    push @invalid, $param;
+                }
             }
             die $self->meta->responses->invalid_param(error_description => sprintf "Invalid parameter%s: %s", @invalid > 1 ? 's' : '', join ', ', @invalid) if @invalid;
             return;

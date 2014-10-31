@@ -78,10 +78,11 @@ has authorizator => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my @allow = @{$self->allow};
+        my @allow = grep { $_ ne 'authorized' } @{$self->allow};
         return sub { 1 } if grep { $_ eq 'all' } @allow;
         return sub {
             my ($roles) = @_;
+            return 0 unless $roles->authorized;
             foreach my $role (@allow) {
                 return 1 if $roles->$role;
             }
@@ -187,6 +188,7 @@ has responses => (
             $meta->add_response($name, $r->{$name});
         }
         $meta->add_response(forbidden => 'error') unless grep { $_ eq 'all' } @{$self->allow};
+        $self->_apply_parameters_changes($meta);
         return $name;
     },
 );
@@ -311,8 +313,11 @@ sub process {
 sub handle {
     my ($self, $context) = @_;
     $context->validate_input();
-    die $context->responses->forbidden
-        unless $self->authorizator->($context->access_roles);
+    unless ($self->authorizator->($context->access_roles)) {
+        die $context->access_roles->authorized
+            ? $context->responses->forbidden
+            : $context->responses->unauthorized
+    }
     my $response = $self->handler->($context);
     unless (blessed $response && $response->does('MR::Rest::Role::Response')) {
         $response = $self->responses->ok(data => $response);
@@ -345,7 +350,24 @@ sub format_uri {
 sub make_immutable {
     my ($self) = @_;
     $self->params_meta->make_immutable();
-    $self->responses;
+    $self->responses->meta->make_immutable();
+    $self->authorizator;
+    return;
+}
+
+sub _apply_parameters_changes {
+    my ($self, $responses) = @_;
+    $responses ||= $self->responses->meta;
+    foreach my $param ($self->params_meta->get_all_parameters()) {
+        my $type = $param->type_constraint;
+        $type = $type->type_parameter if $type->is_a_type_of('Maybe');
+        if (my $message = $type->message) {
+            my $m = do { local $_ = '%s'; $message->() };
+            if (blessed $m && $m->isa('MR::Rest::Response::Error')) {
+                $responses->add_response($m->error => 'error');
+            }
+        }
+    }
     return;
 }
 
