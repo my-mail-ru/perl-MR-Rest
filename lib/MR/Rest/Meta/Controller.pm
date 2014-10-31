@@ -256,7 +256,7 @@ sub dispatch {
             $params[$i] = $components[$i];
         }
     }
-    my $type = $uri =~ /\/$/ ? 'LIST' : $params[$#components] ? 'ITEM' : 'EXTRA';
+    my $type = $uri =~ /\/$/ ? 'LIST' : defined $params[$#components] ? 'ITEM' : 'EXTRA';
     return $class->render(404) unless $current->{$type};
     my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
         or return $class->render(405, [ Allow => join ', ', keys %{$current->{$type}} ]);
