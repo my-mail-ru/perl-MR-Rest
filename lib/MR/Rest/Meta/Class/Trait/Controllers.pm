@@ -5,10 +5,7 @@ use Mouse::Role;
 use MR::Rest::Meta::Controller;
 use MR::Rest::Meta::Class::Trait::Result;
 
-has doc => (
-    is  => 'rw',
-    isa => 'Str',
-);
+with 'MR::Rest::Meta::Trait::Doc';
 
 has field_traits => (
     is  => 'rw',

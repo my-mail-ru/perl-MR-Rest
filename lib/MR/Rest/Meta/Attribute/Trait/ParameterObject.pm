@@ -2,7 +2,7 @@ package MR::Rest::Meta::Attribute::Trait::ParameterObject;
 
 use Mouse::Role;
 
-with 'MR::Rest::Role::Doc';
+with 'MR::Rest::Meta::Trait::Doc';
 
 has param => (
     is  => 'ro',

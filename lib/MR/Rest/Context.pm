@@ -3,6 +3,7 @@ package MR::Rest::Context;
 use Mouse;
 
 use MR::Rest::AccessRoles;
+use MR::Rest::Type;
 
 with 'MR::Rest::Role::Response';
 
@@ -18,10 +19,14 @@ has params => (
     required => 1,
 );
 
-has access_roles => (
+has responses => (
     is  => 'ro',
-    isa => 'MR::Rest::AccessRoles',
-    lazy    => 1,
+    isa => 'MR::Rest::Type::ResponsesName',
+    required => 1,
+);
+
+has '+access_roles' => (
+    is      => 'ro',
     default => sub { MR::Rest::AccessRoles->new() },
 );
 

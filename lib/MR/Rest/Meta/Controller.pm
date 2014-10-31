@@ -9,8 +9,11 @@ use URI::Escape::XS;
 use MR::Rest::Type;
 use MR::Rest::Context;
 use MR::Rest::Parameters;
+use MR::Rest::Responses;
+use MR::Rest::Response::Item;
+use MR::Rest::Response::List;
 
-with 'MR::Rest::Role::Doc';
+with 'MR::Rest::Meta::Trait::Doc';
 
 has method => (
     is  => 'ro',
@@ -60,12 +63,6 @@ has name => (
 has alias => (
     is  => 'rw',
     isa => 'Str',
-);
-
-has data => (
-    is  => 'ro',
-    isa => 'Bool',
-    default => 1,
 );
 
 has context_class => (
@@ -148,56 +145,70 @@ has params_meta => (
     },
 );
 
-has _result => (
-    init_arg => 'result',
+has _responses => (
+    init_arg => 'responses',
     is       => 'ro',
-    isa      => 'ArrayRef | HashRef | Str',
+    isa      => 'HashRef',
     default  => sub { {} },
 );
 
-has result_meta => (
+has responses => (
     init_arg => undef,
     is       => 'ro',
-    does     => 'MR::Rest::Meta::Class::Trait::Result',
+    does     => 'MR::Rest::Type::ResponsesName',
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my $result = $self->_result;
-        return $result->meta unless ref $result || $result =~ /^(?:Array|Hash)Ref\[.+\]$/;
-        my $name = $self->name . '::Result';
+        my $results = $self->_responses;
+        my $name = $self->name . '::Responses';
         Mouse->init_meta(for_class => $name);
         Mouse::Util::MetaRole::apply_metaroles(
             for => $name,
             class_metaroles => {
-                class => ['MR::Rest::Meta::Class::Trait::Result'],
+                class => ['MR::Rest::Meta::Class::Trait::Responses'],
             },
         );
         my $meta = $name->meta;
-        if (ref $result eq 'ARRAY' && @$result == 1) {
-            $meta->list(1);
-            $result = $result->[0];
-        } elsif (ref $result eq 'HASH' && keys %$result == 1 && (keys %$result)[0] =~ /^(?:(.+):|\*)$/) {
-            $meta->hashby($1);
-            $result = (values %$result)[0];
-        } elsif ($result =~ /^ArrayRef\[(.+)\]$/) {
-            $result = $1;
-            $meta->list(1);
-        } elsif ($result =~ /^HashRef\[(.+)\]$/) {
-            $result = $1;
-            $meta->hashby('');
-        }
-        foreach my $r (ref $result eq 'ARRAY' ? @$result : $result) {
-            if (ref $r eq 'HASH') {
-                $meta->add_field($_, $r->{$_}) foreach keys %$r;
-            } else {
-                Mouse::Util::apply_all_roles($name, $r->isa('Mouse::Role') ? $r : $r->role);
+        if (ref $results eq 'HASH') {
+            foreach my $name (keys %$results) {
+                my $val = $results->{$name};
+                if (ref $val eq 'HASH') {
+                    my $suffix = $name;
+                    $suffix =~ s/(?:^|_)(.)/\u$1/g;
+                    $val = { name => $self->name . "::Response::$suffix", %$val };
+                }
+                $meta->add_response($name, $val);
             }
+        } else {
+            confess "Invalid results definition";
         }
-        return $meta;
+        my $r = $self->params_meta->responses->meta->responses;
+        foreach my $name (keys %$r) {
+            $meta->add_response($name, $r->{$name});
+        }
+        $meta->add_response(forbidden => 'error') unless grep { $_ eq 'all' } @{$self->allow};
+        return $name;
     },
 );
 
 my (@controllers, %controllers, %controllers_by_alias);
+
+around BUILDARGS => sub {
+    my $orig = shift;
+    my $class = shift;
+    my %args = @_ == 1 ? %{$_[0]} : @_;
+    if ($args{result}) {
+        $args{response} = {
+            isa    => $args{method} eq 'GET' && $args{uri} =~ /\/$/ ? 'MR::Rest::Response::List' : 'MR::Rest::Response::Item',
+            schema => { data => delete $args{result} },
+        };
+    }
+    if ($args{response}) {
+        $args{response}{doc} = 'Response successfully processed' if ref $args{response} eq 'HASH' && !defined $args{response}{doc};
+        $args{responses}{ok} = delete $args{response};
+    }
+    return $class->$orig(\%args);
+};
 
 sub BUILD {
     my ($self) = @_;
@@ -248,7 +259,7 @@ sub dispatch {
     my $type = $uri =~ /\/$/ ? 'LIST' : $params[$#components] ? 'ITEM' : 'EXTRA';
     return $class->render(404) unless $current->{$type};
     my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
-        or return $class->render(405, undef, [ Allow => join ', ', keys %{$current->{$type}} ]);
+        or return $class->render(405, [ Allow => join ', ', keys %{$current->{$type}} ]);
     my $paramnames = $controller->_path_params;
     return $class->render(404) unless @$paramnames == @params;
     my %params;
@@ -259,7 +270,8 @@ sub dispatch {
         }
     }
     my $params = $controller->params_meta->new_object(env => $env, path_params => \%params);
-    my $context = $controller->context_class->new(env => $env, params => $params);
+    my $responses = $controller->responses;
+    my $context = $controller->context_class->new(env => $env, params => $params, responses => $responses);
     return $controller->process($context);
 }
 
@@ -267,56 +279,51 @@ sub process {
     my ($self, $context) = @_;
     my ($status, $body, $headers, $response);
     eval {
-        $body = $self->handle($context);
-        $body = { data => $body } if $self->data;
-        $response = $context;
+        $response = $self->handle($context);
         1;
     } or do {
         my $e = $@;
-        $body = {};
         if (blessed $e && $e->does('MR::Rest::Role::Response')) {
             $response = $e;
         } else {
             $status = 500;
-            $body->{exception_message} = $e; # FIXME is_test_server
+            $body = $e; # FIXME is_test_server
             warn "[500] $e";
         }
     };
     if ($response) {
-        $status = 0 + $response->status;
-        $headers = $response->headers;
-        if ($status >= 400 && $status < 500) {
-            $body->{error} = $response->error if defined $response->error;
-            $body->{error_description} = $response->error_description if defined $response->error_description;
-            $body->{error_uri} = $response->error_uri if defined $response->error_uri;
-        }
+        eval {
+            $response->access_roles($context->access_roles);
+            $status = 0 + $response->status;
+            $headers = $response->headers;
+            $body = $response->body;
+            1;
+        } or do {
+            $status = 500;
+            $headers = undef;
+            $body = $@; # FIXME is_test_server
+            warn "[500] $@";
+        };
     }
-    return $self->render($status, $body, $headers);
+    return $self->render($status, $headers, $body);
 }
 
 sub handle {
     my ($self, $context) = @_;
     $context->validate_input();
-    die MR::Rest::Error->new(403)
+    die $context->responses->forbidden
         unless $self->authorizator->($context->access_roles);
-    my $data = $self->handler->($context);
-    my $result_meta = $self->result_meta;
-    return $result_meta->transformer->($data, $context->access_roles);
+    my $response = $self->handler->($context);
+    unless (blessed $response && $response->does('MR::Rest::Role::Response')) {
+        $response = $self->responses->ok(data => $response);
+    }
+    return $response;
 }
 
 sub render {
-    my ($self, $status, $data, $headers) = @_;
-    $data = {} unless ref $data eq 'HASH';
-    my $body = eval {
-        encode_json($data);
-    } || do {
-        $data = {};
-        $data->{exception_message} = $@; # FIXME is_test_server
-        eval { encode_json($data) } || '{}';
-    };
+    my ($self, $status, $headers, $body) = @_;
     my @headers = $headers ? @$headers : ();
     unless ($status < 200 || $status == 204 || $status == 304) {
-        push @headers, 'Content-Type' => 'application/json';
         push @headers, 'Content-Length' => length $body;
     }
     return [ $status, \@headers, [ $body ] ];
@@ -338,7 +345,7 @@ sub format_uri {
 sub make_immutable {
     my ($self) = @_;
     $self->params_meta->make_immutable();
-    $self->result_meta->make_immutable();
+    $self->responses;
     return;
 }
 

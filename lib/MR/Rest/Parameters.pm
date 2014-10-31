@@ -1,9 +1,12 @@
 package MR::Rest::Parameters;
 
-use Mouse;
+use Mouse -traits => 'MR::Rest::Meta::Class::Trait::CanThrowResponse';
 
 use Encode;
 use URI::Escape::XS;
+
+use MR::Rest::Responses;
+__PACKAGE__->meta->add_error('invalid_param');
 
 has _env => (
     init_arg => 'env',

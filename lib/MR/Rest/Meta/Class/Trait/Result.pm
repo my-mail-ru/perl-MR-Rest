@@ -5,6 +5,7 @@ use Mouse::Role;
 use MR::Rest::Type;
 
 with 'MR::Rest::Meta::Role::Trait::Result';
+with 'MR::Rest::Meta::Trait::Doc';
 
 has transformer_code => (
     init_arg => undef,
@@ -14,20 +15,32 @@ has transformer_code => (
     default  => sub {
         my ($self) = @_;
         my @code;
+        my $class = $self->name;
         foreach my $cond ('if ($blessed)', 'else') {
             push @code, "$cond {";
             foreach my $field ($self->get_all_fields()) {
                 my $name = $field->name;
+                push @code, "\n#line " . __LINE__ . " \"" . __FILE__ . " in $class($name)\"\n";
                 my $rkey = join '', map "{$_}", split /\./, $name;
                 my $dkey = $cond eq 'else' ? $rkey : $field->accessor;
                 my $result = "\$result$rkey";
                 my $value = "\$_->$dkey";
-                my $exists = $cond eq 'else' && !$field->is_required ? "exists $value" : 1;
                 my $allow = @{$field->allow} == 0 ? 0
                     : grep({ $_ eq 'all' } @{$field->allow}) ? 1
                     : join(' || ', map "\$roles->$_", @{$field->allow});
-                push @code, "if ($exists && $allow) {";
+                push @code, "if ($allow) {";
                 my $type = $field->type_constraint;
+                my $exists = 1;
+                if (!$field->is_required) {
+                    if ($cond eq 'else') {
+                        $exists = "exists $value";
+                    } elsif (!$type->is_a_type_of('Maybe')) {
+                        push @code, "my \$v = $value;";
+                        $exists = 'defined $v';
+                        $value = '$v';
+                    }
+                }
+                push @code, "if ($exists) {";
                 if ($type->is_a_type_of('Num')) {
                     push @code, "$result = 0 + $value;";
                 } elsif ($type->is_a_type_of('Str')) {
@@ -68,6 +81,7 @@ has transformer_code => (
                     push @code, "$result = $name\::transform($value, \$roles);";
                 }
                 push @code, '}';
+                push @code, '}';
             }
             push @code, '}';
         }
@@ -86,9 +100,9 @@ has transformer => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my $name = $self->name;
         my $code = $self->transformer_code;
-        return eval "#line 1 \"$name\"\nsub { (local \$_, my \$roles) = \@_; $code }" || confess $@;
+        my $line = sprintf '#line %s "%s in %s"', __LINE__, __FILE__, $self->name;
+        return eval "$line\nsub { (local \$_, my \$roles) = \@_; $code }" || confess $@;
     },
 );
 
@@ -109,8 +123,9 @@ sub init_meta {
     my $rolemeta = MR::Rest::Meta::Role::Trait::Result->init_meta(%args, for_class => $rolename);
     Mouse::Util::apply_all_roles($name, $rolename);
     my $meta = $name->meta;
-    $meta->add_method(role => sub { $rolename });
+    $meta->doc($args{doc}) if $args{doc};
     $meta->field_traits($args{field_traits}) if $args{field_traits};
+    $meta->add_method(role => sub { $rolename });
     $meta->add_method(transform => $meta->transformer);
     return $meta;
 }

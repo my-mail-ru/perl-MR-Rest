@@ -4,8 +4,6 @@ use Mouse::Role;
 
 use URI::Escape::XS;
 
-use MR::Rest::Error;
-
 with 'MR::Rest::Meta::Role::Trait::Parameters';
 
 has validator => (
@@ -15,27 +13,14 @@ has validator => (
     lazy     => 1,
     default  => sub {
         my ($self) = @_;
-        my $has_form = grep { $_->in eq 'form' } $_[0]->get_all_parameters();
         my @parameters = map $_->name, grep { $_->in ne 'body' } $self->get_all_parameters();
         return sub {
             my ($self) = @_;
-            if ($has_form) {
-                unless ($self->_env->{CONTENT_TYPE} eq 'application/x-www-form-urlencoded') {
-                    die MR::Rest::Error->new(415, 'invalid_content_type', "Content-Type should be 'application/x-www-form-urlencoded'");
-                }
-                unless (exists $self->_env->{CONTENT_LENGTH}) {
-                    die MR::Rest::Error->new(411, 'length_required', "Content-Length Required");
-                }
-                if ($self->_env->{CONTENT_LENGTH} > 1024 * 1024) {
-                    die MR::Rest::Error->new(413, 'request_too_large', "Content-Length should be less then 1Mb");
-                }
-                $self->_form_params;
-            }
             my @invalid;
             foreach my $param (@parameters) {
                 push @invalid, $param unless eval { $self->$param; 1 };
             }
-            die MR::Rest::Error->new(400, 'invalid_param', sprintf("Invalid parameter%s: %s", @invalid > 1 ? 's' : '', join ', ', @invalid)) if @invalid;
+            die $self->meta->responses->invalid_param(error_description => sprintf "Invalid parameter%s: %s", @invalid > 1 ? 's' : '', join ', ', @invalid) if @invalid;
             return;
         };
     },

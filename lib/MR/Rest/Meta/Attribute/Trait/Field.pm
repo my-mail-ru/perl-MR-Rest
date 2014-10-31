@@ -4,7 +4,7 @@ use Mouse::Role;
 
 use MR::Rest::Type;
 
-with 'MR::Rest::Role::Doc';
+with 'MR::Rest::Meta::Trait::Doc';
 
 has accessor => (
     is  => 'ro',

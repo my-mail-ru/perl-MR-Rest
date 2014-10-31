@@ -1,10 +1,11 @@
 package MR::Rest::Role::Parameters::Body;
 
-use Mouse::Role;
+use Mouse::Role -traits => 'MR::Rest::Meta::Role::Trait::CanThrowResponse';
 
 use File::Map;
 
-use MR::Rest::Error;
+use MR::Rest::Responses;
+__PACKAGE__->meta->add_error('invalid_content_length');
 
 has _read_bytes => (
     is  => 'rw',
@@ -26,12 +27,12 @@ sub read {
     $offset = 0 unless defined $offset;
     my $read = $self->_env->{'psgi.input'}->read($_[1], $length, $offset);
     if (!defined $read) {
-        die MR::Rest::Error->new(500);
+        confess "Failed to read from psgi.input";
     } elsif ($read == 0) {
-        die MR::Rest::Error->new(400) unless $self->_read_bytes == $self->content_length;
+        die $self->meta->responses->invalid_content_length unless $self->_read_bytes == $self->content_length;
     } else {
         my $total = $self->_read_bytes($self->_read_bytes + $read);
-        die MR::Rest::Error->new(400) if $total > $self->content_length;
+        die $self->meta->responses->invalid_content_length if $total > $self->content_length;
     }
     return $read;
 }

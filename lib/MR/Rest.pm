@@ -4,10 +4,11 @@ use Mouse;
 use Mouse::Exporter;
 use Mouse::Util::MetaRole;
 use MR::Rest::Meta::Controller;
+use MR::Rest::Util::Response ();
 
 Mouse::Exporter->setup_import_methods(
     as_is => [qw/ doc params result controller /],
-    also  => 'Mouse',
+    also  => ['Mouse', 'MR::Rest::Util::Response'],
 );
 
 sub init_meta {

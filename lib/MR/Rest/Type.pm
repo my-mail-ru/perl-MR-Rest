@@ -9,7 +9,7 @@ enum 'MR::Rest::Type::ParameterLocation' => [qw/ path query body header form /];
 subtype 'MR::Rest::Type::Status'
     => as 'Int'
     => where { $_ == 100 || $_ == 101 || $_ >= 200 && $_ <= 206 || $_ >= 300 && $_ <= 307 || $_ >= 400 && $_ < 417 || $_ >= 500 && $_ <= 505 }
-    => message { "Not valid HTTP status code" };
+    => message { "Not valid HTTP status code '$_'" };
 
 subtype 'MR::Rest::Type::Error'
     => as 'Maybe[Str]'
@@ -27,6 +27,10 @@ subtype 'MR::Rest::Type::ParametersName'
 subtype 'MR::Rest::Type::ResultName'
     => as 'ClassName'
     => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') };
+
+subtype 'MR::Rest::Type::ResponsesName'
+    => as 'ClassName'
+    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Responses') };
 
 subtype 'MR::Rest::Type::Allow'
     => as 'ArrayRef[Str]';

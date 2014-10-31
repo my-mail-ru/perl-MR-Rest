@@ -4,7 +4,7 @@ use Mouse::Role;
 
 use MR::Rest::Type;
 
-with 'MR::Rest::Role::Doc';
+with 'MR::Rest::Meta::Trait::Doc';
 
 has in => (
     is  => 'ro',
@@ -19,9 +19,16 @@ before _process_options => sub {
     } else {
         $args->{is} = 'ro';
         $args->{lazy} = 1;
-        my $locattr = "_$args->{in}_params";
-        $args->{default} = sub { $_[0]->$locattr->{$name} };
+        $args->{required} = 1 if $args->{in} eq 'path';
+        if ($args->{in} eq 'header') {
+            my $envname = "HTTP_\U$name";
+            $args->{default} = sub { $_[0]->_env->{$envname} };
+        } else {
+            my $locattr = "_$args->{in}_params";
+            $args->{default} = sub { $_[0]->$locattr->{$name} };
+        }
     }
+    $args->{isa} = "Maybe[$args->{isa}]" unless $args->{required};
     return;
 };
 
