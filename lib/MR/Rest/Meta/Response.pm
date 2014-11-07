@@ -52,8 +52,9 @@ has response_sub => (
         my ($self) = @_;
         my $isa = $self->class;
         my %args = (%{$self->args}, status => $self->status);
+        my $schema_attr = $isa->meta->get_attribute('schema');
+        my $default = $schema_attr ? $schema_attr->default() : undef;
         if (my $schema = $self->schema) {
-            my $default = $isa->meta->get_attribute('schema')->default();
             if (ref $schema eq 'HASH') {
                 my %args = exists $schema->{fields} ? %$schema : (fields => $schema);
                 $args{also} = [ $args{also} ? ref $args{also} ? @{$args{also}} : $args{also} : (), $default ] if $default;
@@ -62,8 +63,10 @@ has response_sub => (
             }
             confess "Incompatible schema: $schema" if $default && !$schema->does($default->role);
             $args{schema} = $schema;
+        } elsif ($default) {
+            $self->_schema($default);
         }
-        my %mutable = map { $_ => delete $args{$_} } grep $isa->meta->get_attribute($_)->has_accessor, keys %args;
+        my %mutable = map { $_->name => delete $args{$_->name} } grep { $args{$_->name} && $_->has_accessor } $isa->meta->get_all_attributes();
         return sub { shift; $isa->new(%mutable, @_, %args) };
     },
 );
@@ -97,6 +100,12 @@ sub error_name {
     my ($class, $name) = @_;
     $name =~ s/(?:^|_)(.)/\u$1/g;
     return "MR::Rest::Response::Error::$name";
+}
+
+sub common_name {
+    my ($class, $name) = @_;
+    $name =~ s/(?:^|_)(.)/\u$1/g;
+    return "MR::Rest::Response::Common::$name";
 }
 
 no Mouse;

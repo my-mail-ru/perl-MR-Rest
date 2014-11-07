@@ -23,6 +23,11 @@ before _process_options => sub {
         if ($args->{in} eq 'header') {
             my $envname = "HTTP_\U$name";
             $args->{default} = sub { $_[0]->_env->{$envname} };
+            unless (exists $args->{doc}) {
+                $args->{doc} = $name;
+                $args->{doc} =~ s/^(.)/\u$1/;
+                $args->{doc} =~ s/_(.)/-\u$1/g;
+            }
         } else {
             my $locattr = "_$args->{in}_params";
             $args->{default} = sub { $_[0]->$locattr->{$name} };

@@ -134,14 +134,16 @@ controller 'GET /devel/doc/{name}' => (
         my (@uri, %apis, @results, @models, %models);
         foreach my $controller (@{$c->params->name->meta->controllers}) {
             push @uri, $controller->uri;
-            my $type = $controller->responses->meta->responses->{ok}->schema;
-            push @results, $type;
+            my $ok = $controller->responses->meta->responses->{ok};
+            my $type = $ok->schema ? $ok->name : undef;
+            push @results, $type if $type;
             my @responses;
             foreach my $response (values %{$controller->responses->meta->responses}) {
-                push @results, $response->name;
+                my $type = $response->schema ? $response->name : undef;
+                push @results, $type if $type;
                 push @responses, {
                     code          => $response->status,
-                    responseModel => $response->name,
+                    responseModel => $type || 'void',
                     message       => defined $response->doc ? $response->doc : "",
                 };
             }
@@ -161,7 +163,7 @@ controller 'GET /devel/doc/{name}' => (
                         data_type($_->type_constraint, []),
                     }, $controller->params_meta->get_all_parameters()
                 ],
-                type             => $type,
+                type             => $type || 'void',
                 responseMessages => [ sort { $a->{code} <=> $b->{code} } @responses ],
             };
         }

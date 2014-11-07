@@ -5,8 +5,6 @@ use Mouse;
 use MR::Rest::AccessRoles;
 use MR::Rest::Type;
 
-with 'MR::Rest::Role::Response';
-
 has env => (
     is  => 'ro',
     isa => 'HashRef',
@@ -25,8 +23,10 @@ has responses => (
     required => 1,
 );
 
-has '+access_roles' => (
+has access_roles => (
     is      => 'ro',
+    isa     => 'MR::Rest::AccessRoles',
+    lazy    => 1,
     default => sub { MR::Rest::AccessRoles->new() },
 );
 

@@ -259,14 +259,14 @@ sub dispatch {
         }
     }
     my $type = $uri =~ /\/$/ ? 'LIST' : defined $params[$#components] ? 'ITEM' : 'EXTRA';
-    return $class->render(404) unless $current->{$type};
+    return [ 404 ] unless $current->{$type};
     my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
-        or return $class->render(405, [ Allow => join ', ', keys %{$current->{$type}} ]);
+        or return [ 405, [ Allow => join ', ', keys %{$current->{$type}} ] ];
     my $paramnames = $controller->_path_params;
-    return $class->render(404) unless @$paramnames == @params;
+    return [ 404 ] unless @$paramnames == @params;
     my %params;
     foreach my $i (0 .. $#$paramnames) {
-        return $class->render(404) if defined $params[$i] xor defined $paramnames->[$i];
+        return [ 404 ] if defined $params[$i] xor defined $paramnames->[$i];
         if (defined $paramnames->[$i]) {
             $params{$paramnames->[$i]} = decode('UTF-8', decodeURIComponent($params[$i]));
         }
@@ -279,35 +279,29 @@ sub dispatch {
 
 sub process {
     my ($self, $context) = @_;
-    my ($status, $body, $headers, $response);
-    eval {
-        $response = $self->handle($context);
-        1;
-    } or do {
+    my $response = eval { $self->handle($context) } || do {
         my $e = $@;
-        if (blessed $e && $e->does('MR::Rest::Role::Response')) {
-            $response = $e;
-        } else {
-            $status = 500;
-            $body = $e; # FIXME is_test_server
-            warn "[500] $e";
-        }
+        return _render_500($e) unless blessed $e && $e->does('MR::Rest::Role::Response');
+        $e;
     };
-    if ($response) {
-        eval {
-            $response->access_roles($context->access_roles);
-            $status = 0 + $response->status;
-            $headers = $response->headers;
-            $body = $response->body;
-            1;
-        } or do {
-            $status = 500;
-            $headers = undef;
-            $body = $@; # FIXME is_test_server
-            warn "[500] $@";
+    my %render = (access_roles => $context->access_roles);
+    if (ref $response eq 'CODE') {
+        return sub {
+            my ($responder) = @_;
+            $response->(sub { $responder->(eval { $_[0]->render(%render) } || _render_500($@)) });
+            return;
         };
+    } else {
+        return eval { $response->render(%render) } || _render_500($@);
     }
-    return $self->render($status, $headers, $body);
+}
+
+sub _render_500 {
+    my ($e) = @_;
+    $e ||= 'No response';
+    warn "[500] $e";
+    my $body = 1 ? $e : ''; # FIXME is_test_server
+    return [ 500, [ 'Content-Type' => 'text/plain', 'Content-Length' => length $body ], [ $body ] ];
 }
 
 sub handle {
@@ -319,19 +313,9 @@ sub handle {
             : $context->responses->unauthorized
     }
     my $response = $self->handler->($context);
-    unless (blessed $response && $response->does('MR::Rest::Role::Response')) {
-        $response = $self->responses->ok(data => $response);
-    }
-    return $response;
-}
-
-sub render {
-    my ($self, $status, $headers, $body) = @_;
-    my @headers = $headers ? @$headers : ();
-    unless ($status < 200 || $status == 204 || $status == 304) {
-        push @headers, 'Content-Length' => length $body;
-    }
-    return [ $status, \@headers, [ $body ] ];
+    return $response if ref $response eq 'CODE';
+    return $response if blessed $response && $response->does('MR::Rest::Role::Response');
+    return $self->responses->ok(data => $response);
 }
 
 sub controllers {

@@ -24,7 +24,7 @@ MR::Rest::Meta::Class::Trait::Result->init_meta(
     doc => 'Generic error object',
 );
 
-with 'MR::Rest::Role::Response';
+extends 'MR::Rest::Response';
 with 'MR::Rest::Role::Response::JSON';
 
 has error => (

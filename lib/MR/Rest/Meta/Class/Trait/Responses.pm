@@ -11,7 +11,11 @@ has responses => (
 sub add_response {
     my ($self, $name, $response) = @_;
     if (!ref $response) {
-        $response = MR::Rest::Meta::Response->error_name($name) if $response eq 'error';
+        if ($response eq 'error') {
+            $response = MR::Rest::Meta::Response->error_name($name);
+        } elsif ($response eq 'common') {
+            $response = MR::Rest::Meta::Response->common_name($name);
+        }
         $response = MR::Rest::Meta::Response->response($response);
     } elsif (ref $response eq 'HASH') {
         $response = MR::Rest::Meta::Response->new($response);

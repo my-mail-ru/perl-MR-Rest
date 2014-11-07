@@ -38,6 +38,20 @@ coerce 'MR::Rest::Type::Allow'
     => from 'Str'
     => via { [$_] };
 
+subtype 'MR::Rest::Type::BodyHandle'
+    => as 'Object'
+    => where { $_->can('getline') && $_->can('close') }
+    => message { "Methods getline() and close() are required" };
+
+subtype 'MR::Rest::Type::Headers'
+    => as 'HTTP::Headers';
+coerce 'MR::Rest::Type::Headers'
+    => from 'HashRef'
+    => via { HTTP::Headers->new(%$_) };
+coerce 'MR::Rest::Type::Headers'
+    => from 'ArrayRef'
+    => via { HTTP::Headers->new(@$_) };
+
 no Mouse::Util::TypeConstraints;
 
 1;

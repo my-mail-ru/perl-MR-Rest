@@ -7,12 +7,18 @@ use MR::Rest::Response::Error;
 use MR::Rest::Meta::Response;
 
 Mouse::Exporter->setup_import_methods(
-    as_is => [qw/ response error_response where_throw_error /],
+    as_is => [qw/ response common_response error_response where_throw_error /],
 );
 
 sub response {
     my ($name, %args) = @_;
     $args{name} = $name;
+    return MR::Rest::Meta::Response->new(\%args);
+}
+
+sub common_response {
+    my ($name, %args) = @_;
+    $args{name} = MR::Rest::Meta::Response->common_name($name);
     return MR::Rest::Meta::Response->new(\%args);
 }
 
@@ -24,6 +30,7 @@ sub error_response {
         $errargs{error_description} = $desc if defined $desc;
     } else {
         ($name, my %args) = @_;
+        $status = $args{status};
         $errargs{error} = $name;
         $errargs{error_description} = $args{desc} if defined $args{desc};
         $errargs{error_uri} = $args{uri} if defined $args{uri};

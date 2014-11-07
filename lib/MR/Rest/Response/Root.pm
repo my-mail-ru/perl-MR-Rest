@@ -2,7 +2,7 @@ package MR::Rest::Response::Root;
 
 use Mouse;
 
-with 'MR::Rest::Role::Response';
+extends 'MR::Rest::Response';
 with 'MR::Rest::Role::Response::JSON';
 
 has data => (
