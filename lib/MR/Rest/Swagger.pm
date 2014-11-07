@@ -157,7 +157,7 @@ controller 'GET /devel/doc/{name}' => (
                 parameters => [
                     map +{
                         paramType => $_->in,
-                        name      => $_->name,
+                        name      => $_->in ne 'header' ? $_->name : do { my $n = $_->name; $n =~ s/^(.)/\u$1/; $n =~ s/_(.)/-\u$1/g; $n },
                         required  => $_->is_required,
                         $_->doc ? (description => $_->doc) : (),
                         data_type($_->type_constraint, []),
