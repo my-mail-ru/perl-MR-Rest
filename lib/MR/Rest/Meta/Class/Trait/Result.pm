@@ -57,6 +57,8 @@ has transformer_code => (
                     } elsif ($param->is_a_type_of('Bool')) {
                         push @code, "my \$v = $value; $result = defined \$v ? \$v ? \\1 : \\0 : undef;";
                     }
+                } elsif ($type->is_a_type_of('Ref')) {
+                    push @code, "$result = $value";
                 } elsif ($type->is_a_type_of('ArrayRef')) {
                     my $param = $type->type_parameter;
                     if ($param->is_a_type_of('Num')) {
