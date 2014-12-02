@@ -300,7 +300,7 @@ sub _render_500 {
     my ($e) = @_;
     $e ||= 'No response';
     warn "[500] $e";
-    my $body = 1 ? $e : ''; # FIXME is_test_server
+    my $body = 0 ? $e : ''; # FIXME is_test_server
     return [ 500, [ 'Content-Type' => 'text/plain', 'Content-Length' => length $body ], [ $body ] ];
 }
 
