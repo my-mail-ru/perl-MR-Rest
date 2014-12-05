@@ -4,8 +4,9 @@ use Mouse;
 
 use MR::Rest::Type;
 use MR::Rest::Response::Item;
+use MR::Rest::Util::Result ();
 
-with 'MR::Rest::Meta::Trait::Doc';
+with 'MR::Rest::Role::Doc';
 
 has '+doc' => (
     lazy    => 1,
@@ -58,7 +59,7 @@ has response_sub => (
             if (ref $schema eq 'HASH') {
                 my %args = exists $schema->{fields} ? %$schema : (fields => $schema);
                 $args{also} = [ $args{also} ? ref $args{also} ? @{$args{also}} : $args{also} : (), $default ] if $default;
-                $schema = MR::Rest::Meta::Class::Trait::Result->init_meta(%args, for_class => $self->name)->name;
+                $schema = MR::Rest::Util::Result::result($self->name, %args)->name;
                 $self->_schema($schema);
             }
             confess "Incompatible schema: $schema" if $default && !$schema->does($default->role);

@@ -13,6 +13,7 @@ has _responses => (
 
 sub add_response {
     my ($self, $name, $rclass) = @_;
+    $rclass = MR::Rest::Meta::Response->error_name($name) if $rclass eq 'error';
     confess "Duplicate response name: $name" if $self->_responses->{$name};
     return $self->_responses->{$name} = MR::Rest::Meta::Response->response($rclass);
 }
@@ -20,7 +21,6 @@ sub add_response {
 sub add_error {
     my ($self, $name) = @_;
     return $self->add_response($name, MR::Rest::Meta::Response->error_name($name));
-
 }
 
 no Mouse::Role;

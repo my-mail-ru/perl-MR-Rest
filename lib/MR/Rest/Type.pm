@@ -16,17 +16,13 @@ subtype 'MR::Rest::Type::Error'
     => where { !defined || /^[a-z][a-z0-9_]*$/ }
     => message { "Not valid error identificatior: only [a-z0-9_]+ are allowed" };
 
-subtype 'MR::Rest::Type::ControllersName'
-    => as 'ClassName'
-    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Controllers') };
-
 subtype 'MR::Rest::Type::ParametersName'
     => as 'ClassName'
     => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Parameters') };
 
 subtype 'MR::Rest::Type::ResultName'
     => as 'ClassName'
-    => where { $_->meta->does('MR::Rest::Meta::Class::Trait::Result') };
+    => where { $_->meta->isa('MR::Rest::Meta::Class::Result') };
 
 subtype 'MR::Rest::Type::ResponsesName'
     => as 'ClassName'
@@ -51,6 +47,24 @@ coerce 'MR::Rest::Type::Headers'
 coerce 'MR::Rest::Type::Headers'
     => from 'ArrayRef'
     => via { HTTP::Headers->new(@$_) };
+
+subtype 'MR::Rest::Type::Version'
+    => as 'Str',
+    => where { /^\d+(?:\.\d+)*$/ };
+
+subtype 'MR::Rest::Type::Resource::Owner'
+    => as 'Maybe[CodeRef]';
+coerce 'MR::Rest::Type::Resource::Owner'
+    => from 'Str'
+    => via { my $p = $_; sub { $_[0]->params->$p } };
+
+subtype 'MR::Rest::Type::Path'
+    => as 'Str',
+    => where { /^\// };
+
+subtype 'MR::Rest::Type::Config::Allow'
+    => as 'Str'
+    => where { my $t = find_type_constraint($_); $t && $t->is_a_type_of('ArrayRef') };
 
 no Mouse::Util::TypeConstraints;
 

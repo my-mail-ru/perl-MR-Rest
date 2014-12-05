@@ -2,10 +2,9 @@ package MR::Rest::Response::Error;
 
 use Mouse;
 
-use MR::Rest::Meta::Class::Trait::Result;
-MR::Rest::Meta::Class::Trait::Result->init_meta(
-    for_class => 'MR::Rest::Response::Error::Result',
-    fields    => {
+use MR::Rest::Util::Result;
+result 'MR::Rest::Response::Error::Result' => (
+    fields => {
         error => {
             isa => 'Str',
             doc => 'A single error code, used by client to identify distinct error type',
@@ -23,6 +22,7 @@ MR::Rest::Meta::Class::Trait::Result->init_meta(
     },
     doc => 'Generic error object',
 );
+no MR::Rest::Util::Result;
 
 extends 'MR::Rest::Response';
 with 'MR::Rest::Role::Response::JSON';

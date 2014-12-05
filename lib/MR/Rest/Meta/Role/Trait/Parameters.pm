@@ -2,6 +2,8 @@ package MR::Rest::Meta::Role::Trait::Parameters;
 
 use Mouse::Role;
 
+with 'MR::Rest::Meta::Role::Trait::CanThrowResponse';
+
 sub add_parameter {
     my $self = shift;
     my $name = shift;

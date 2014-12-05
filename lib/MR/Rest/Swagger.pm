@@ -5,7 +5,9 @@ use MR::Rest;
 use MR::Rest::Type;
 use MR::Rest::Response::Root;
 
-doc 'Swagger specifications';
+use List::MoreUtils qw/uniq/;
+
+service 'Swagger';
 
 result 'MR::Rest::Swagger::Info' => {
     title             => 'Str',
@@ -21,7 +23,50 @@ result 'MR::Rest::Swagger::Resource' => {
     description => { isa => 'Str', required => 0 },
 };
 
-controller 'GET /devel/doc/' => (
+result 'MR::Rest::Swagger::LoginEndpoint' => {
+    url => 'Str',
+};
+
+result 'MR::Rest::Swagger::Grant::Implicit' => {
+    loginEndpoint => 'MR::Rest::Swagger::LoginEndpoint',
+    tokenName     => 'Str',
+};
+
+result 'MR::Rest::Swagger::GrantTypes' => {
+    implicit => 'MR::Rest::Swagger::Grant::Implicit',
+};
+
+result 'MR::Rest::Swagger::Scope' => {
+    scope       => 'Str',
+    description => { isa => 'Str', required => 0 },
+};
+
+result 'MR::Rest::Swagger::Authorization' => {
+    type       => 'Str',
+    scopes     => 'ArrayRef[MR::Rest::Swagger::Scope]',
+    grantTypes => 'MR::Rest::Swagger::GrantTypes',
+};
+
+error_response service_not_found => (
+    status => 404,
+    desc   => 'Service %s not found',
+);
+
+resource '/{service_name}/' => (
+    params => {
+        params  => { service_name => 'Str' },
+        objects => {
+            service => {
+                param     => 'service_name',
+                isa       => 'MR::Rest::Service',
+                to_object => sub { MR::Rest::Service->find($_) or die $_[0]->meta->responses->service_not_found(args => [$_]) },
+            },
+        },
+        responses => { service_not_found => 'error' },
+    },
+);
+
+operation GET => (
     doc      => q/The Resource Listing serves as the root document for the API description. It contains general information about the API and an inventory of the available resources./,
     response => {
         isa    => 'MR::Rest::Response::Root',
@@ -30,14 +75,20 @@ controller 'GET /devel/doc/' => (
             apis           => 'ArrayRef[MR::Rest::Swagger::Resource]',
             apiVersion     => { isa => 'Str', required => 0 },
             info           => { isa => 'MR::Rest::Swagger::Info', required => 0 },
-#           authorizations => { isa => '', required => 0 },
+            authorizations => { isa => 'HashRef[MR::Rest::Swagger::Authorization]', required => 0 },
         },
     },
     handler  => sub {
         my ($c) = @_;
+        my $service = $c->params->service;
+        my @packages = uniq map $_->in_package, $service->resources();
         return {
             swaggerVersion => '1.2',
-            apis => [ map +{ path => $_->name, $_->doc ? (description => $_->doc) : () },  MR::Rest::Meta::Class::Trait::Controllers->controllers_metas() ],
+            apis           => [ map +{ path => $_ }, @packages ],
+            info           => {
+                title       => $service->name,
+                description => $service->doc || '',
+            },
         };
     },
 );
@@ -110,11 +161,19 @@ result 'MR::Rest::Swagger::Model' => {
     discriminator => { isa => 'Str', required => 0 },
 };
 
-controller 'GET /devel/doc/{name}' => (
-    doc => q/The API Declaration provides information about an API exposed on a resource./,
-    params   => {
-        name => 'MR::Rest::Type::ControllersName',
+result 'MR::Rest::Swagger::Authorizations' => {
+    oauth2 => 'ArrayRef[MR::Rest::Swagger::Scope]',
+};
+
+resource '/{service_name}/{package_name}' => (
+    params => {
+        also   => 'MR::Rest::Swagger::ItemList::Parameters',
+        params => { package_name => 'ClassName' },
     },
+);
+
+operation GET => (
+    doc => q/The API Declaration provides information about an API exposed on a resource./,
     response => {
         isa    => 'MR::Rest::Response::Root',
         schema => {
@@ -126,61 +185,65 @@ controller 'GET /devel/doc/{name}' => (
             models         => { isa => 'HashRef[MR::Rest::Swagger::Model]', hashby => 'id', required => 0 },
             produces       => { isa => 'ArrayRef[Str]', required => 0 },
             consumes       => { isa => 'ArrayRef[Str]', required => 0 },
-#           authorizations => { isa => '', required => 0 },
+            authorizations => { isa => 'MR::Rest::Swagger::Authorizations', required => 0 },
         },
     },
     handler  => sub {
         my ($c) = @_;
-        my (@uri, %apis, @results, @models, %models);
-        foreach my $controller (@{$c->params->name->meta->controllers}) {
-            push @uri, $controller->uri;
-            my $ok = $controller->responses->meta->responses->{ok};
-            my $type = $ok->schema ? $ok->name : undef;
-            push @results, $type if $type;
-            my @responses;
-            foreach my $response (values %{$controller->responses->meta->responses}) {
-                my $type = $response->schema ? $response->name : undef;
-                push @results, $type if $type;
-                push @responses, {
-                    code          => $response->status,
-                    responseModel => $type || 'void',
-                    message       => defined $response->doc ? $response->doc : "",
+        my $package = $c->params->package_name;
+        my (@apis, @results, %results_default, @errors, @models, %models);
+        foreach my $resource (grep { $_->in_package eq $package } $c->params->service->resources()) {
+            my @ops;
+            foreach my $controller ($resource->operations()) {
+                my $type;
+                my @responses;
+                my $responses = $controller->responses->meta->responses;
+                foreach my $name (keys %$responses) {
+                    my $response = $responses->{$name};
+                    my $model = $response->class eq 'MR::Rest::Response::Error' ? $response->name : $response->schema;
+                    push @results, $model if $model;
+                    push @responses, {
+                        code          => $response->status,
+                        responseModel => $model || 'void',
+                        message       => defined $response->doc ? $response->doc : "",
+                    };
+                    $type = $model if $name eq 'ok';
+                }
+                push @ops, {
+                    method     => $controller->method,
+                    $controller->doc ? (
+                        summary => do { my $d = $controller->doc; $d =~ s/\.(?:\s.*)$//s; $d },
+                        notes   => $controller->doc,
+                    ) : (),
+                    nickname   => $controller->alias,
+                    parameters => [
+                        map +{
+                            paramType => $_->in,
+                            name      => $_->in ne 'header' ? $_->name : do { my $n = $_->name; $n =~ s/^(.)/\u$1/; $n =~ s/_(.)/-\u$1/g; $n },
+                            required  => $_->is_required,
+                            $_->doc ? (description => $_->doc) : (),
+                            data_type($_->type_constraint, []),
+                        }, $controller->params_meta->get_all_parameters()
+                    ],
+                    type             => $type || 'void',
+                    responseMessages => [ sort { $a->{code} <=> $b->{code} } @responses ],
                 };
             }
-            push @{$apis{$controller->uri}}, {
-                method     => $controller->method,
-                $controller->doc ? (
-                    summary => do { my $d = $controller->doc; $d =~ s/\.(?:\s.*)$//s; $d },
-                    notes   => $controller->doc,
-                ) : (),
-                nickname   => $controller->alias,
-                parameters => [
-                    map +{
-                        paramType => $_->in,
-                        name      => $_->in ne 'header' ? $_->name : do { my $n = $_->name; $n =~ s/^(.)/\u$1/; $n =~ s/_(.)/-\u$1/g; $n },
-                        required  => $_->is_required,
-                        $_->doc ? (description => $_->doc) : (),
-                        data_type($_->type_constraint, []),
-                    }, $controller->params_meta->get_all_parameters()
-                ],
-                type             => $type || 'void',
-                responseMessages => [ sort { $a->{code} <=> $b->{code} } @responses ],
+            push @apis, {
+                path       => $resource->path,
+                operations => \@ops,
             };
         }
-        my @apis = map {
-            my $o = delete $apis{$_};
-            $o ? { path => $_, operations => $o } : ();
-        } @uri;
         while (my $name = shift @results) {
             next if $models{$name};
             $models{$name} = 1;
-            my $response = MR::Rest::Meta::Response->response($name);
-            my $result = $response && $response->class eq 'MR::Rest::Response::Error' ? "MR::Rest::Response::Error::Result"->meta : $name->meta;
+            my $error = $name =~ /^MR::Rest::Response::Error::/ ? MR::Rest::Meta::Response->response($name) : undef;
+            my $result = $error ? $error->schema->meta : $name->meta;
             my @properties = map +{
                 name => $_->name,
                 $_->doc ? (description => $_->doc) : (),
                 data_type($_->type_constraint, \@results),
-                $response && exists $response->args->{$_->name} ? (defaultValue => $response->args->{$_->name}) : (),
+                $error && exists $error->args->{$_->name} ? (defaultValue => $error->args->{$_->name}) : (),
             }, $result->get_all_fields();
             push @models, {
                 id          => $name,

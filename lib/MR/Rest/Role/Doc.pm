@@ -1,4 +1,4 @@
-package MR::Rest::Meta::Trait::Doc;
+package MR::Rest::Role::Doc;
 
 use Mouse::Role;
 

@@ -12,6 +12,18 @@ error_response request_too_large       => (413, 'Content-Length should be less t
 error_response invalid_param           => (400, 'Invalid parameter');
 error_response not_implemented         => (501, 'Not implemented');
 
+common_response moved_permanently => (
+    isa    => 'MR::Rest::Response',
+    status => 301,
+    doc    => 'Moved Permanently',
+);
+
+common_response found => (
+    isa    => 'MR::Rest::Response',
+    status => 302,
+    doc    => 'Found',
+);
+
 common_response not_modified => (
     isa    => 'MR::Rest::Response',
     status => 304,

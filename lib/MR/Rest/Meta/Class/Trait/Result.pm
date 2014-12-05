@@ -3,9 +3,10 @@ package MR::Rest::Meta::Class::Trait::Result;
 use Mouse::Role;
 
 use MR::Rest::Type;
+use MR::Rest::Meta::Role::Result;
 
 with 'MR::Rest::Meta::Role::Trait::Result';
-with 'MR::Rest::Meta::Trait::Doc';
+with 'MR::Rest::Role::Doc';
 
 has transformer_code => (
     init_arg => undef,
@@ -127,30 +128,6 @@ has has_access_restrictions => (
         return 0;
     },
 );
-
-my $ANON_SERIAL = 0;
-
-sub init_meta {
-    my ($class, %args) = @_;
-    my $name = delete $args{for_class};
-    $name = sprintf "MR::Rest::Result::__ANON__::%s", ++$ANON_SERIAL unless defined $name;
-    Mouse->init_meta(for_class => $name);
-    Mouse::Util::MetaRole::apply_metaroles(
-        for => $name,
-        class_metaroles => {
-            class => ['MR::Rest::Meta::Class::Trait::Result'],
-        },
-    );
-    my $rolename = "${name}::Role";
-    my $rolemeta = MR::Rest::Meta::Role::Trait::Result->init_meta(%args, for_class => $rolename);
-    Mouse::Util::apply_all_roles($name, $rolename);
-    my $meta = $name->meta;
-    $meta->doc($args{doc}) if $args{doc};
-    $meta->field_traits($args{field_traits}) if $args{field_traits};
-    $meta->add_method(role => sub { $rolename });
-    $meta->add_method(transform => $meta->transformer);
-    return $meta;
-}
 
 before make_immutable => sub {
     my ($self) = @_;

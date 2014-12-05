@@ -1,4 +1,4 @@
-package MR::Rest::Meta::Controller;
+package MR::Rest::Operation;
 
 use Mouse;
 
@@ -13,18 +13,19 @@ use MR::Rest::Responses;
 use MR::Rest::Response::Item;
 use MR::Rest::Response::List;
 
-with 'MR::Rest::Meta::Trait::Doc';
+with 'MR::Rest::Role::Doc';
+
+has resource => (
+    is  => 'ro',
+    isa => 'MR::Rest::Resource',
+    required => 1,
+    weak_ref => 1,
+);
 
 has method => (
     is  => 'ro',
     isa => 'MR::Rest::Type::Method',
     default => 'GET',
-);
-
-has uri => (
-    is  => 'ro',
-    isa => 'Str',
-    required => 1,
 );
 
 has allow => (
@@ -40,12 +41,6 @@ has handler => (
     required => 1,
 );
 
-has in_class => (
-    is  => 'ro',
-    isa => 'ClassName',
-    required => 1,
-);
-
 has name => (
     is  => 'ro',
     isa => 'Str',
@@ -54,15 +49,20 @@ has name => (
         my ($self) = @_;
         my $name = $self->alias;
         $name =~ s/(?:^|_)(.)/\u$1/g;
-        my $class = sprintf "%s::%s", $_[0]->in_class, $name;
+        my $class = sprintf "%s::%s", $_[0]->resource->namespace, $name;
         confess "Class $class already exists" if $class->isa('UNIVERSAL');
         return $class;
     },
 );
 
 has alias => (
-    is  => 'rw',
+    is  => 'ro',
     isa => 'Str',
+    lazy    => 1,
+    default => sub {
+        my ($self) = @_;
+        return join '_', lc $self->method, $self->resource->name;
+    },
 );
 
 has context_class => (
@@ -137,6 +137,8 @@ has params_meta => (
                 Mouse::Util::apply_all_roles($name, $p);
             }
         }
+        my $resource_role = $self->resource->params_role;
+        Mouse::Util::apply_all_roles($name, $resource_role) if $resource_role;
         my %pin = map { $_->name => $_->in } $meta->get_all_parameters();
         foreach my $name (@path_params) {
             confess "Duplicate parameter $name" if $pin{$name} && $pin{$name} ne 'path';
@@ -193,7 +195,35 @@ has responses => (
     },
 );
 
-my (@controllers, %controllers, %controllers_by_alias);
+has _uri_formatter => (
+    init_arg => undef,
+    is       => 'ro',
+    isa      => 'CodeRef',
+    lazy     => 1,
+    default  => sub {
+        my ($self) = @_;
+        my $params = $self->params_meta;
+        my @path = map $_->name, grep { $_->in eq 'path' } $params->get_all_parameters();
+        my $path_str = join '|', map "\Q$_\E", @path;
+        my $path_re = qr/\{($path_str)\}/;
+        my @query = map $_->name, grep { $_->in eq 'query' } $params->get_all_parameters();
+        my $resource_path = $self->resource->path;
+        return sub {
+            my ($params) = @_;
+            foreach my $name (@path) {
+                confess "Parameter '$name' is required" unless defined $params->{$name};
+            }
+            my $path = $resource_path;
+            $path =~ s/$path_re/encodeURIComponent("$params->{$1}")/ge;
+            my @qs;
+            foreach my $name (@query) {
+                push @qs, join '=', encodeURIComponent("$name"), encodeURIComponent("$params->{$name}") if defined $params->{$name};
+            }
+            $path .= '?' . join '&', @qs if @qs;
+            return $path;
+        };
+    },
+);
 
 around BUILDARGS => sub {
     my $orig = shift;
@@ -201,7 +231,7 @@ around BUILDARGS => sub {
     my %args = @_ == 1 ? %{$_[0]} : @_;
     if ($args{result}) {
         $args{response} = {
-            isa    => $args{method} eq 'GET' && $args{uri} =~ /\/$/ ? 'MR::Rest::Response::List' : 'MR::Rest::Response::Item',
+            isa    => $args{method} eq 'GET' && $args{resource}->path =~ /\/$/ ? 'MR::Rest::Response::List' : 'MR::Rest::Response::Item',
             schema => { data => delete $args{result} },
         };
     }
@@ -214,71 +244,15 @@ around BUILDARGS => sub {
 
 sub BUILD {
     my ($self) = @_;
-    my $uri = $self->uri;
-    my @components = split /\//, $uri;
-    confess "Invalid controller declaration: resource uri should start with /" unless shift @components eq '';
-    my @alias = (lc $self->method);
-    my $params = $self->_path_params;
-    my $current = \%controllers;
-    foreach my $i (0 .. $#components) {
-        if ($components[$i] =~ /^\{(.*)\}$/) {
-            $params->[$i] = $1;
-        } else {
-            $current = $current->{$i}->{$components[$i]} ||= {};
-            push @alias, $components[$i];
-        }
-    }
-    my $type = $uri =~ /\/$/ ? 'LIST' : $uri =~ /\}$/ ? 'ITEM' : 'EXTRA';
-    push @alias, lc $type unless $type eq 'EXTRA';
-    confess sprintf "Controller for resource uri %s, method %s is already registered", $uri, $self->method if $current->{$type}->{$self->method};
-    $current->{$type}->{$self->method} = $self;
-    unless ($self->alias) {
-        my $alias = join '_', @alias;
-        $alias =~ s/[^a-z0-9_]/_/g;
-        $self->alias($alias);
-    }
-    confess sprintf "Controller with alias %s is already registered", $self->alias if $controllers_by_alias{$self->alias};
-    $controllers_by_alias{$self->alias} = $self;
-    push @controllers, $self;
+    my $resource = $self->resource;
+    $resource->add_operation($self);
     return;
 }
 
-sub dispatch {
-    my ($class, $env) = @_;
-    my $uri = $env->{REQUEST_URI};
-    $uri =~ s/\?.*$//;
-    my @components = split /\//, $uri;
-    confess "Invalid REQUEST_URI: resource uri should start with /" if @components && shift @components ne '';
-    my @params;
-    my $current = \%controllers;
-    foreach my $i (0 .. $#components) {
-        if (my $next = $current->{$i}->{$components[$i]}) {
-            $current = $next;
-        } else {
-            $params[$i] = $components[$i];
-        }
-    }
-    my $type = $uri =~ /\/$/ ? 'LIST' : defined $params[$#components] ? 'ITEM' : 'EXTRA';
-    return [ 404 ] unless $current->{$type};
-    my $controller = $current->{$type}->{$env->{REQUEST_METHOD}}
-        or return [ 405, [ Allow => join ', ', keys %{$current->{$type}} ] ];
-    my $paramnames = $controller->_path_params;
-    return [ 404 ] unless @$paramnames == @params;
-    my %params;
-    foreach my $i (0 .. $#$paramnames) {
-        return [ 404 ] if defined $params[$i] xor defined $paramnames->[$i];
-        if (defined $paramnames->[$i]) {
-            $params{$paramnames->[$i]} = decode('UTF-8', decodeURIComponent($params[$i]));
-        }
-    }
-    my $params = $controller->params_meta->new_object(env => $env, path_params => \%params);
-    my $responses = $controller->responses;
-    my $context = $controller->context_class->new(env => $env, params => $params, responses => $responses);
-    return $controller->process($context);
-}
-
 sub process {
-    my ($self, $context) = @_;
+    my ($self, $env, $path_params) = @_;
+    my $params = $self->params_meta->new_object(env => $env, path_params => $path_params);
+    my $context = $self->context_class->new(env => $env, params => $params, responses => $self->responses, operation => $self);
     my $response = eval { $self->handle($context) } || do {
         my $e = $@;
         return _render_500($e) unless blessed $e && $e->does('MR::Rest::Role::Response');
@@ -300,7 +274,7 @@ sub _render_500 {
     my ($e) = @_;
     $e ||= 'No response';
     warn "[500] $e";
-    my $body = 1 ? $e : ''; # FIXME is_test_server
+    my $body = 0 ? $e : ''; # FIXME is_test_server
     return [ 500, [ 'Content-Type' => 'text/plain', 'Content-Length' => length $body ], [ $body ] ];
 }
 
@@ -318,17 +292,9 @@ sub handle {
     return $self->responses->ok(data => $response);
 }
 
-sub controllers {
-    return @controllers;
-}
-
-sub controller {
-    return $controllers_by_alias{$_[1]};
-}
-
 sub format_uri {
     my ($self, %params) = @_;
-    return $self->params_meta->uri_formatter->($self->uri, \%params);
+    return $self->_uri_formatter->(\%params);
 }
 
 sub make_immutable {
