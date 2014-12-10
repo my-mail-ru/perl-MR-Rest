@@ -118,6 +118,12 @@ sub install {
     my ($self) = @_;
 
     my $current = $route{$self->service->host} ||= {};
+    if (my $re = $self->service->host_regexp) {
+        confess "Different host_regexp for the same host"
+            if defined $current->{'{r}'} && $current->{'{r}'} ne $re;
+        $current->{'{r}'} ||= $re;
+    }
+
     my (undef, @base) = split /\//, $self->service->base_path;
     $current = $current->{$_} ||= {} foreach @base;
     my $pos = @base;
@@ -142,8 +148,19 @@ sub install {
 
 sub find {
     my ($class, $host, $path) = @_;
-    my $current = $route{$host}
-        or return;
+
+    my $current = $route{$host};
+    unless ($current) {
+        foreach my $r (values %route) {
+            my $re = $r->{'{r}'} or next;
+            if ($host =~ $re) {
+                $current = $r;
+                last;
+            }
+        }
+    }
+    return unless $current;
+
     my @params;
     my (undef, @chunks) = split /\//, $path;
     foreach my $i (0 .. $#chunks) {

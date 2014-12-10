@@ -32,6 +32,12 @@ has host => (
     isa    => 'Str',
 );
 
+has host_regexp => (
+    is     => 'ro',
+    writer => '_host_regexp',
+    isa    => 'RegexpRef'
+);
+
 has base_path => (
     is      => 'ro',
     writer  => '_base_path',
@@ -84,10 +90,11 @@ sub resource {
 }
 
 sub install {
-    my ($self, $host, $base_path) = @_;
+    my ($self, %args) = @_;
     confess sprintf "Service %s already installed", $self->name if defined $self->host;
-    $self->_host($host);
-    $self->_base_path($base_path) if defined $base_path;
+    $self->_host($args{host});
+    $self->_host_regexp($args{host_regexp}) if defined $args{host_regexp};
+    $self->_base_path($args{base_path}) if defined $args{base_path};
     $_->install() foreach $self->resources();
     return;
 }
