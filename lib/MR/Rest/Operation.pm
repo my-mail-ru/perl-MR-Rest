@@ -144,6 +144,7 @@ has params_meta => (
             confess "Duplicate parameter $name" if $pin{$name} && $pin{$name} ne 'path';
             $meta->add_parameter($name, in => 'path') unless $pin{$name};
         }
+        $meta->make_immutable();
         return $meta;
     },
 );

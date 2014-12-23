@@ -66,6 +66,13 @@ subtype 'MR::Rest::Type::Config::Allow'
     => as 'Str'
     => where { my $t = find_type_constraint($_); $t && $t->is_a_type_of('ArrayRef') };
 
+subtype 'MR::Rest::Type::Binary'
+    => as 'Str'
+    => where { !utf8::is_utf8($_) };
+
+subtype 'MR::Rest::Type::CSV'
+    => as 'ArrayRef';
+
 no Mouse::Util::TypeConstraints;
 
 1;

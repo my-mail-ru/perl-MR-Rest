@@ -2,9 +2,6 @@ package MR::Rest::Parameters;
 
 use Mouse -traits => 'MR::Rest::Meta::Class::Trait::CanThrowResponse';
 
-use Encode;
-use URI::Escape::XS;
-
 use MR::Rest::Responses;
 __PACKAGE__->meta->add_error('invalid_param');
 
@@ -27,30 +24,13 @@ has _query_params => (
     is  => 'ro',
     isa => 'HashRef',
     lazy    => 1,
-    default => sub {
-        my ($self) = @_;
-        return $self->_parse_urlencoded($self->_env->{QUERY_STRING});
-    },
+    default => sub { $_[0]->_parse_query($_[0]->_env->{QUERY_STRING}) },
 );
 
 sub validate {
     my ($self) = @_;
     $self->meta->validator->($self);
     return;
-}
-
-sub _parse_urlencoded {
-    my ($class, $data) = @_;
-    return {
-        map {
-            my ($k, $v) = split /=/, $_, 2;
-            foreach ($k, $v) {
-                s/\+/ /g;
-                $_ = decode('UTF-8', decodeURIComponent($_));
-            }
-            $k => $v;
-        } split /&/, $data
-    };
 }
 
 no Mouse;

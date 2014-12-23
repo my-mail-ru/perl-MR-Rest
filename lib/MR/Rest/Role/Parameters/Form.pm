@@ -22,7 +22,7 @@ has _form_params => (
         }
         confess "Failed to read from input stream" unless defined $read;
         # TODO check content-length, wait until all data is available
-        return $self->_parse_urlencoded($data);
+        return $self->_parse_form($data);
     },
 );
 
