@@ -6,6 +6,8 @@ use Encode;
 use JSON::XS;
 use URI::Escape::XS;
 
+use MR::Metrics;
+
 use MR::Rest::Type;
 use MR::Rest::Context;
 use MR::Rest::Parameters;
@@ -226,6 +228,26 @@ has _uri_formatter => (
     },
 );
 
+has _timing_metric => (
+    init_arg => undef,
+    is       => 'ro',
+    isa      => 'MR::Metrics::Timing',
+    lazy     => 1,
+    default  => sub {
+        my ($self) = @_;
+        my $service = $self->resource->service;
+        return MR::Metrics::Timing->new(
+            backend => MR::Rest::Config->find($self->resource->in_package)->metrics_backend,
+            path    => '{host}.{path}.{method}.{status}.time',
+            args    => {
+                host   => $service->host,
+                path   => $service->base_path . $self->resource->path,
+                method => $self->method,
+            },
+        );
+    },
+);
+
 around BUILDARGS => sub {
     my $orig = shift;
     my $class = shift;
@@ -251,6 +273,14 @@ sub BUILD {
 }
 
 sub process {
+    my $self = shift;
+    my $timing = $self->_timing_metric->start();
+    my $result = $self->_process(@_);
+    $timing->finish(status => $result->[0]);
+    return $result;
+}
+
+sub _process {
     my ($self, $env, $path_params) = @_;
     my $params = $self->params_meta->new_object(env => $env, path_params => $path_params);
     my $context = $self->context_class->new(env => $env, params => $params, responses => $self->responses, operation => $self);

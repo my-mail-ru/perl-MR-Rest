@@ -3,6 +3,7 @@ package MR::Rest::Config;
 use Mouse;
 
 use MR::Rest::Type;
+use MR::Metrics::Backend;
 
 has namespaces => (
     is  => 'ro',
@@ -58,6 +59,12 @@ has field => (
         $meta->add_attribute('+allow' => isa => $self->allow);
         return $meta->name;
     },
+);
+
+has metrics_backend => (
+    is  => 'ro',
+    isa => 'MR::Metrics::Backend',
+    coerce => 1,
 );
 
 around BUILDARGS => sub {
