@@ -223,7 +223,7 @@ operation GET => (
                             required  => $_->is_required,
                             $_->doc ? (description => $_->doc) : (),
                             data_type($_->type_constraint, []),
-                        }, $controller->params_meta->get_all_parameters()
+                        }, grep !$_->hidden, $controller->params_meta->get_all_parameters()
                     ],
                     type             => $type || 'void',
                     responseMessages => [ sort { $a->{code} <=> $b->{code} } @responses ],

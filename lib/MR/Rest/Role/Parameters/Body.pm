@@ -1,8 +1,12 @@
 package MR::Rest::Role::Parameters::Body;
 
-use Mouse::Role -traits => 'MR::Rest::Meta::Role::Trait::CanThrowResponse';
+use Mouse::Role -traits => 'MR::Rest::Meta::Role::Trait::Parameters';
 
 use File::Map;
+
+use MR::Rest::Header::Parameterized;
+__PACKAGE__->meta->add_parameter(content_type => { in => 'header', isa => 'MR::Rest::Header::Parameterized', hidden => 1 });
+__PACKAGE__->meta->add_parameter(content_length => { in => 'header', isa => 'Int', hidden => 1 });
 
 use MR::Rest::Responses;
 __PACKAGE__->meta->add_error('invalid_content_length');
@@ -12,14 +16,6 @@ has _read_bytes => (
     isa => 'Int',
     default => 0,
 );
-
-sub content_type {
-    shift->_env->{CONTENT_TYPE};
-}
-
-sub content_length {
-    shift->_env->{CONTENT_LENGTH};
-}
 
 sub read {
     my ($self, undef, $length, $offset) = @_;

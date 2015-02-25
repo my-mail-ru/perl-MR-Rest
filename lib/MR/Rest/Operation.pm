@@ -119,12 +119,6 @@ has params_meta => (
             for_class  => $name,
             base_class => 'MR::Rest::Parameters',
         );
-        Mouse::Util::MetaRole::apply_metaroles(
-            for => $name,
-            class_metaroles => {
-                class => ['MR::Rest::Meta::Class::Trait::Parameters'],
-            },
-        );
         my @path_params = grep $_, @{$self->_path_params};
         my %is_path = map { $_ => 1 } @path_params;
         my $meta = $name->meta;

@@ -1,6 +1,6 @@
 package MR::Rest::Parameters;
 
-use Mouse -traits => 'MR::Rest::Meta::Class::Trait::CanThrowResponse';
+use Mouse -traits => 'MR::Rest::Meta::Class::Trait::Parameters';
 
 use MR::Rest::Responses;
 __PACKAGE__->meta->add_error('invalid_param');

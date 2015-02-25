@@ -1,6 +1,10 @@
 package MR::Rest::Role::Parameters::Form;
 
-use Mouse::Role -traits => 'MR::Rest::Meta::Role::Trait::CanThrowResponse';
+use Mouse::Role -traits => 'MR::Rest::Meta::Role::Trait::Parameters';
+
+use MR::Rest::Header::Parameterized;
+__PACKAGE__->meta->add_parameter(content_type => { in => 'header', isa => 'MR::Rest::Header::Parameterized', hidden => 1 });
+__PACKAGE__->meta->add_parameter(content_length => { in => 'header', isa => 'Int', hidden => 1 });
 
 use MR::Rest::Responses;
 __PACKAGE__->meta->add_error('invalid_content_type');
@@ -28,14 +32,15 @@ has _form_params => (
 
 after validate => sub {
     my ($self) = shift;
-    unless ($self->_env->{CONTENT_TYPE} eq 'application/x-www-form-urlencoded') {
-        die $self->meta->responses->invalid_content_type;
-    }
-    unless (exists $self->_env->{CONTENT_LENGTH}) {
+    if (!defined $self->content_length) {
         die $self->meta->responses->content_length_required;
-    }
-    if ($self->_env->{CONTENT_LENGTH} > 1024 * 1024) {
-        die $self->meta->responses->request_too_large;
+    } elsif ($self->content_length) {
+        unless ($self->content_type && $self->content_type->value eq 'application/x-www-form-urlencoded') {
+            die $self->meta->responses->invalid_content_type;
+        }
+        if ($self->content_length > 1024 * 1024) {
+            die $self->meta->responses->request_too_large;
+        }
     }
     $self->_form_params;
     return;

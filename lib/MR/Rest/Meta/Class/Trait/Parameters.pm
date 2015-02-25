@@ -6,6 +6,7 @@ use Encode ();
 use URI::Escape::XS ();
 
 with 'MR::Rest::Meta::Role::Trait::Parameters';
+with 'MR::Rest::Meta::Class::Trait::CanThrowResponse';
 
 has validator => (
     init_arg => undef,
