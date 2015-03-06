@@ -17,15 +17,19 @@ has transformer_code => (
         my ($self) = @_;
         my @code;
         my $class = $self->name;
-        foreach my $cond ('if ($blessed)', 'else') {
+        my @cond = ('if ($blessed)', 'elsif (defined $_->{_})', 'else');
+        foreach my $case (qw/ object composite hash /) {
+            my $cond = shift @cond;
             push @code, "$cond {";
             foreach my $field ($self->get_all_fields()) {
                 my $name = $field->name;
                 push @code, "\n#line " . __LINE__ . " \"" . __FILE__ . " in $class($name)\"\n";
                 my $rkey = join '', map "{$_}", split /\./, $name;
-                my $dkey = $cond eq 'else' ? $rkey : $field->accessor;
                 my $result = "\$result$rkey";
-                my $value = "\$_->$dkey";
+                my $accessor = $field->accessor;
+                my $value = $case eq 'object' ? "\$_->$accessor"
+                    : $case eq 'composite' ? "(exists \$_->$rkey ? \$_->$rkey : \$_->{_}->$accessor)"
+                    : "\$_->$rkey";
                 my $allow = @{$field->allow} == 0 ? 0
                     : grep({ $_ eq 'all' } @{$field->allow}) ? 1
                     : join(' || ', map "\$roles->$_", @{$field->allow});
@@ -33,7 +37,7 @@ has transformer_code => (
                 my $type = $field->type_constraint;
                 my $exists = 1;
                 if (!$field->is_required) {
-                    if ($cond eq 'else') {
+                    if ($case eq 'hash') {
                         $exists = "exists $value";
                     } elsif (!$type->is_a_type_of('Maybe')) {
                         push @code, "my \$v = $value;";
@@ -45,7 +49,7 @@ has transformer_code => (
                 if ($type->is_a_type_of('Num')) {
                     push @code, "$result = 0 + $value;";
                 } elsif ($type->is_a_type_of('Str')) {
-                    my $strval = $cond eq 'else' ? "\"$value\"" : "'' . $value";
+                    my $strval = $case eq 'hash' ? "\"$value\"" : "'' . $value";
                     push @code, "$result = $strval;";
                 } elsif ($type->is_a_type_of('Bool')) {
                     push @code, "$result = $value ? \\1 : \\0;";
