@@ -147,7 +147,7 @@ sub install {
 }
 
 sub find {
-    my ($class, $host, $path) = @_;
+    my ($class, $host, $path, $path_encoded) = @_;
 
     my $current = $route{$host};
     unless ($current) {
@@ -163,6 +163,10 @@ sub find {
 
     my @params;
     my (undef, @chunks) = split /\//, $path;
+    if ($path_encoded) {
+        $_ = decodeURIComponent($_) foreach @chunks;
+    }
+    $_ = decode('UTF-8', $_) foreach @chunks;
     foreach my $i (0 .. $#chunks) {
         if (my $next = $current->{$chunks[$i]}) {
             $current = $next;
@@ -181,7 +185,7 @@ sub find {
     foreach my $i (0 .. $#$paramnames) {
         return if defined $params[$i] xor defined $paramnames->[$i];
         if (defined $paramnames->[$i]) {
-            $params{$paramnames->[$i]} = decode('UTF-8', decodeURIComponent($params[$i]));
+            $params{$paramnames->[$i]} = $params[$i];
         }
     }
     return ($resource, \%params);

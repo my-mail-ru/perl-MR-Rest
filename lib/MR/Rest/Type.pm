@@ -66,6 +66,8 @@ subtype 'MR::Rest::Type::Config::Allow'
     => as 'Str'
     => where { my $t = find_type_constraint($_); $t && $t->is_a_type_of('ArrayRef') };
 
+enum 'MR::Rest::Type::Config::PathVar' => [qw/ PATH_INFO REQUEST_URI /];
+
 subtype 'MR::Rest::Type::Binary'
     => as 'Str'
     => where { !utf8::is_utf8($_) };

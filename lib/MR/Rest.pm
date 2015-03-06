@@ -61,9 +61,11 @@ sub controller {
 
 sub dispatch {
     my ($class, $env) = @_;
-    my $uri = $env->{REQUEST_URI};
-    $uri =~ s/\?.*$//;
-    my ($resource, $path_params) = MR::Rest::Resource->find($env->{HTTP_HOST}, $uri);
+    my $path_var = MR::Rest::Config->find($class)->path_var;
+    my $path_encoded = $path_var eq 'REQUEST_URI';
+    my $path = $env->{$path_var};
+    $path =~ s/\?.*$// if $path_encoded;
+    my ($resource, $path_params) = MR::Rest::Resource->find($env->{HTTP_HOST}, $path, $path_encoded);
     return [ 404 ] unless $resource;
     my $operation = $resource->operation($env->{REQUEST_METHOD})
         or return [ 405, [ Allow => join ', ', map $_->method, $resource->operations() ] ];

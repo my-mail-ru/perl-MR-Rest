@@ -67,6 +67,12 @@ has metrics_backend => (
     coerce => 1,
 );
 
+has path_var => (
+    is  => 'ro',
+    isa => 'MR::Rest::Type::Config::PathVar',
+    default => 'PATH_INFO',
+);
+
 around BUILDARGS => sub {
     my $orig = shift;
     my $class = shift;
