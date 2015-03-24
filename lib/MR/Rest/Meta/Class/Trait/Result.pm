@@ -37,8 +37,8 @@ has transformer_code => (
                 my $type = $field->type_constraint;
                 my $exists = 1;
                 if (!$field->is_required) {
-                    if ($case eq 'hash') {
-                        $exists = "exists $value";
+                    if ($case ne 'object') {
+                        $exists = "exists \$_->$rkey";
                     } elsif (!$type->is_a_type_of('Maybe')) {
                         push @code, "my \$v = $value;";
                         $exists = 'defined $v';
