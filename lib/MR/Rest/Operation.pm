@@ -269,13 +269,13 @@ sub BUILD {
 sub process {
     my $self = shift;
     my $timing = $self->_timing_metric->start();
-    my $result = $self->_process(@_);
-    $timing->finish(status => $result->[0]);
+    my $result = $self->_process(@_, $timing);
+    $timing->finish(status => $result->[0]) unless ref $result eq 'CODE';
     return $result;
 }
 
 sub _process {
-    my ($self, $env, $path_params) = @_;
+    my ($self, $env, $path_params, $timing) = @_;
     my $params = $self->params_meta->new_object(env => $env, path_params => $path_params);
     my $context = $self->context_class->new(env => $env, params => $params, responses => $self->responses, operation => $self);
     my $response = eval { $self->handle($context) } || do {
@@ -287,7 +287,12 @@ sub _process {
     if (ref $response eq 'CODE') {
         return sub {
             my ($responder) = @_;
-            $response->(sub { $responder->(eval { $_[0]->render(%render) } || _render_500($@)) });
+            my $render;
+            $response->(sub {
+                $render = eval { $_[0]->render(%render) } || _render_500($@);
+                $responder->($render);
+            });
+            $timing->finish(status => $render->[0]);
             return;
         };
     } else {
